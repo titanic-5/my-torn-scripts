@@ -9,10 +9,7 @@
 // @grant        none
 // ==/UserScript==
 function createListeners() {
-    console.log("creating");
     $("#bazaarRoot").on("click", "[class^='controlPanel_'] button", function() {
-        console.log("Button clicked");
-
         let item = $(this).closest("[class^=item_]");
         waitForElementToExist("[class^=numberInput").then(() => {
             setTimeout(() => setMaxQuantity(item), 100);
@@ -37,7 +34,7 @@ function setMaxQuantity(item) {
             break;
         }
     }
-    console.log("newqt", newqt);
+
     $(input).val(newqt).trigger("input");
 }
 
