@@ -27,22 +27,13 @@ function setMaxQuantity(item) {
     const maxqt = parseInt($(item).find("[class^=amount_]").text().match(/\(([\d,]+)/)[1].replace(/[^0-9]/g, ''), 10);
 
     let newqt = Math.floor(wallet / price);
-    newqt = Math.min(newqt, maxqt);
+        newqt = Math.min(newqt, maxqt);
 
-    setNativeValue(input[0], newqt);
+    const prototype = Object.getPrototypeOf(input[0]);
+    const setter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
+
+    setter.call(input[0], newqt);
     input[0].dispatchEvent(new Event('input', { bubbles: true }));
-}
-
-function setNativeValue(element, value) {
-    const valueSetter = Object.getOwnPropertyDescriptor(element, 'value').set;
-    const prototype = Object.getPrototypeOf(element);
-    const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
-
-    if (valueSetter && valueSetter !== prototypeValueSetter) {
-        prototypeValueSetter.call(element, value);
-    } else {
-        valueSetter.call(element, value);
-    }
 }
 
 function waitForElementToExist(selector) {
