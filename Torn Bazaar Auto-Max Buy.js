@@ -10,7 +10,8 @@
 // ==/UserScript==
 function createListeners() {
     $("#bazaarRoot").on("click", "[class^='controlPanel_'] button", function(e) {
-        let item = $(this).closest("[class^=item_]");
+        const item = $(this).closest("[class^=item_]");
+
         waitForElementToExist("[class^=numberInput").then(() => {
             setTimeout(() => setMaxQuantity(item), 100);
         });
@@ -20,9 +21,9 @@ function createListeners() {
 function setMaxQuantity(item) {
     let wallet = parseInt($("#user-money").text().replace(/[^0-9]/g, ''), 10);
 
-    let input = $(item).find("[class^=numberInput]");
-    let price = $(item).find("[class^=price_]").text().replace(/[^0-9]/g, '');
-    let maxqt = $(item).find("[class^=amount_]").text().match(/\(([\d,]+)/)[1].replace(/[^0-9]/g, '');
+    const input = $(item).find("[class^=numberInput]");
+    const price = $(item).find("[class^=price_]").text().replace(/[^0-9]/g, '');
+    const maxqt = $(item).find("[class^=amount_]").text().match(/\(([\d,]+)/)[1].replace(/[^0-9]/g, '');
 
     let newqt = 0;
     while(newqt < maxqt) {
