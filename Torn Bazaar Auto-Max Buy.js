@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Torn Bazaar Auto-Max Buy
+// @name         Auto Max Bazaar
 // @namespace    Titanic_
 // @version      v1.3
 // @description  When you click the shopping cart button, quantity will be set to max you can afford.
@@ -31,7 +31,6 @@ function setMaxQuantity(item) {
 
     setNativeValue(input[0], newqt);
     input[0].dispatchEvent(new Event('input', { bubbles: true }));
-    input[0].dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 function setNativeValue(element, value) {
