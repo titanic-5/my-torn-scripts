@@ -9,7 +9,7 @@
 // @grant        none
 // ==/UserScript==
 function createListeners() {
-    $("#bazaarRoot").on("click", "[class^='controlPanel_'] button", function() {
+    $("#bazaarRoot").on("click", "[class^='controlPanel_'] button", function(e) {
         let item = $(this).closest("[class^=item_]");
         waitForElementToExist("[class^=numberInput").then(() => {
             setTimeout(() => setMaxQuantity(item), 100);
@@ -25,7 +25,6 @@ function setMaxQuantity(item) {
     let maxqt = $(item).find("[class^=amount_]").text().match(/\(([\d,]+)/)[1].replace(/[^0-9]/g, '');
 
     let newqt = 0;
-
     while(newqt < maxqt) {
         wallet -= price;
         if(wallet >= 0) {
