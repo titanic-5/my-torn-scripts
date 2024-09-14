@@ -14,19 +14,17 @@
     let ran2 = false;
 
     function init() {
-        alert("Init fired")
         waitForElementToExist("[class^=numberInput]").then(createListeners());
     }
 
     function createListeners() {
         $("button[class*='buy_'").on("click", function(e) {
-            alert("Buy clicked");
             setMaxQuantity(e);
         });
     }
 
     function setMaxQuantity(e) {
-        alert("max triggered");
+        //alert("max triggered");
         console.log(e);
         let item = e.target.parentElement.parentElement.parentElement
 
