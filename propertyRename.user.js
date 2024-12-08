@@ -5,6 +5,8 @@
 // @description  Add a pencil icon to edit nicknames for properties.
 // @match        https://www.torn.com/properties.php
 // @require      https://gist.github.com/raw/2625891/waitForKeyElements.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/propertyRename.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/propertyRename.user.js
 // @grant        none
 // ==/UserScript==
 
