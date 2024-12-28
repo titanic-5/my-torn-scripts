@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Replace Edu Timer
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Convert to hours
 // @author       Titanic_
 // @match        *://*.torn.com/*
