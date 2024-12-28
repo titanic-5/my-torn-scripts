@@ -5,6 +5,8 @@
 // @description  Convert to hours
 // @author       Titanic_
 // @match        *://*.torn.com/*
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/edu_timer.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/edu_timer.user.js
 // @grant        none
 // ==/UserScript==
 
