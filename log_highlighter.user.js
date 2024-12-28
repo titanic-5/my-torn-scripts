@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Attack Log Highlighter
 // @namespace    Titanic_
-// @version      1.0
+// @version      1.1
 // @description  Try to highlight special events in attack logs
 // @author       Titanic_
 // @match        https://www.torn.com/loader.php?sid=attackLog*
@@ -22,6 +22,11 @@
         'attacking-events-leave'
     ];
 
+    const critClasses = [
+        'attacking-events-powerful',
+        'attacking-events-critical-hit',
+    ];
+
     const elements = document.querySelectorAll("ul.log-list.overview span[class*='attacking-events-']");
     elements.forEach(element => {
         const classList = Array.from(element.classList);
@@ -33,7 +38,8 @@
             }
 
             const box = document.createElement('span');
-            if (attackingClass === 'attacking-events-powerful') {
+
+            if (critClasses.includes(attackingClass)) {
                 box.style.backgroundColor = 'red';
                 box.textContent = 'crit';
             } else {
