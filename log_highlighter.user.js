@@ -5,6 +5,8 @@
 // @description  Try to highlight special events in attack logs
 // @author       Titanic_
 // @match        https://www.torn.com/loader.php?sid=attackLog*
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/log_highlighter.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/log_highlighter.user.js
 // @grant        none
 // ==/UserScript==
 
