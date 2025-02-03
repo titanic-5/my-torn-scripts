@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ranked War Member Status
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Displays online, offline, and idle counts in faction wars
 // @author       You
 // @match        https://www.torn.com/factions.php*
@@ -38,7 +38,6 @@
         let factionNamesDiv = document.querySelector(".faction-names");
         if (!factionNamesDiv) return;
 
-        // Check if the status display already exists, update it if so
         let existingDisplay = document.getElementById("faction-status-display");
         if (existingDisplay) {
             existingDisplay.innerHTML = `
@@ -48,7 +47,6 @@
             return;
         }
 
-        // Create a new div for the status display
         let statusDiv = document.createElement("div");
         statusDiv.id = "faction-status-display";
         statusDiv.style.cssText = `
@@ -66,14 +64,13 @@
             <div><strong>Friendly:</strong> 🟢 ${yOnline} | 🟡 ${yIdle} | 🔴 ${yOffline}</div>
         `;
 
-        // Append the status display to the faction-names container
         factionNamesDiv.appendChild(statusDiv);
     }
 
     function waitForFactionWar() {
         let observer = new MutationObserver((mutations, obs) => {
             if (document.querySelector(".faction-war")) {
-                obs.disconnect(); // Stop observing once found
+                obs.disconnect();
                 countStatuses();
             }
         });
