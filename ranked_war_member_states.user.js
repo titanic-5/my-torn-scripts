@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ranked War Member Status
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  Displays online, offline, and idle counts in faction wars
 // @author       You
 // @match        https://www.torn.com/factions.php*
@@ -41,8 +41,8 @@
         let existingDisplay = document.getElementById("faction-status-display");
         if (existingDisplay) {
             existingDisplay.innerHTML = `
-                <div><strong>Enemy:</strong> 🟢 ${eOnline} | 🟡 ${eIdle} | 🔴 ${eOffline}</div>
-                <div><strong>Friendly:</strong> 🟢 ${yOnline} | 🟡 ${yIdle} | 🔴 ${yOffline}</div>
+                <div><strong>Enemy:</strong> 🟢 ${eOnline} - 🟡 ${eIdle} - 🔴 ${eOffline}</div><br/>
+                <div><strong>Friendly:</strong> 🟢 ${yOnline} - 🟡 ${yIdle} - 🔴 ${yOffline}</div>
             `;
             return;
         }
@@ -51,32 +51,21 @@
         statusDiv.id = "faction-status-display";
         statusDiv.style.cssText = `
             margin-top: 10px;
-            padding: 25px;
+            padding: 15px;
             background: rgba(0, 0, 0, 0.7);
             color: white;
             border-radius: 5px;
             text-align: center;
-            font-size: 14px;
+            font-size: 12px;
         `;
 
         statusDiv.innerHTML = `
-            <div><strong>Enemy:</strong> 🟢 ${eOnline} | 🟡 ${eIdle} | 🔴 ${eOffline}</div>
-            <div><strong>Friendly:</strong> 🟢 ${yOnline} | 🟡 ${yIdle} | 🔴 ${yOffline}</div>
+            <div><strong>Enemy:</strong> 🟢 ${eOnline} - 🟡 ${eIdle} - 🔴 ${eOffline}</div><br/>
+            <div><strong>Friendly:</strong> 🟢 ${yOnline} - 🟡 ${yIdle} - 🔴 ${yOffline}</div>
         `;
 
         factionNamesDiv.appendChild(statusDiv);
     }
 
-    function waitForFactionWar() {
-        let observer = new MutationObserver((mutations, obs) => {
-            if (document.querySelector(".faction-war")) {
-                obs.disconnect();
-                countStatuses();
-            }
-        });
-
-        observer.observe(document.body, { childList: true, subtree: true });
-    }
-
-    waitForFactionWar();
+    setInterval(countStatuses, 1000);
 })();
