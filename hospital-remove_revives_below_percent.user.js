@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Remove Revives Below X%
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.0
 // @description  try to take over the world!
 // @author       Titanic_
 // @match        https://www.torn.com/hospital*
@@ -19,7 +19,7 @@
           innerHTML: "% Setting",
           className: "rrbx t-clear h c-pointer  m-icon line-h24 right last",
           onclick: () => {
-            minChance = prompt("Minimum revive chance to keep?", minChance);
+            minChance = parseFloat(prompt("Minimum revive chance to keep?", minChance))
             localStorage.setItem("RRBX_chance", minChance);
           },
         })
