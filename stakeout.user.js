@@ -1,14 +1,14 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    http://tampermonkey.net/
-// @version      2.4.0
+// @version      2.5.0
 // @description  Stakeout factions or individual users
 // @author       Titanic_
 // @match        https://www.torn.com/profiles.php?XID=*
 // @match        https://www.torn.com/factions.php?step=profile&ID=*
 // @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/stakeout.user.js
 // @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/stakeout.user.js
-// @grant        none
+// @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
 const API_KEY_PLACEHOLDER = "YOUR_API_KEY_HERE";
@@ -49,10 +49,26 @@ const CATEGORY_ORDER = [
 	STATUS_CATEGORIES.OTHER,
 ];
 
+const YATA_API_KEY_STORAGE_KEY = "stakeoutYataApiKey";
+const TORNSTATS_API_KEY_STORAGE_KEY = "stakeoutTornStatsApiKey";
+const SPIES_MODAL_ID = "stakeout-spies-modal";
+const SPIES_MODAL_OVERLAY_ID = "stakeout-spies-modal-overlay";
+const YATA_API_KEY_INPUT_ID = "stakeout-yata-api-key-input";
+const TORNSTATS_API_KEY_INPUT_ID = "stakeout-tornstats-api-key-input";
+const SPY_TOOLTIP_ID = "stakeout-spy-tooltip";
+
+const DB_NAME = "StakeoutDB";
+const DB_VERSION = 1;
+const YATA_SPIES_STORE_NAME = "yataFactionSpies";
+const CACHE_DURATION_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+
 let individualMonitorTimeouts = new Map();
 let activeCountdownIntervals = new Map();
 let currentDisplayableMemberStatuses = [];
 let previouslyOkayFactionUserIDs = new Set();
+let currentYataSpies = {};
+let spiesModalEscapeKeyListener = null;
+let dbPromise = null;
 
 function createStyledElement(tag, styles = {}, attributes = {}) {
 	const element = document.createElement(tag);
@@ -84,19 +100,16 @@ function formatTimeDescription(baseDescription, remainingSeconds) {
 
 	let newTimeValue;
 	if (remainingSeconds <= 0) newTimeValue = "now";
-	else if (remainingSeconds < 60) newTimeValue = `${remainingSeconds}s`; // seconds only
+	else if (remainingSeconds < 60) newTimeValue = `${remainingSeconds}s`;
 	else if (remainingSeconds < 3600) {
-		// minutes and seconds
 		const mins = Math.floor(remainingSeconds / 60);
 		const secs = remainingSeconds % 60;
 		newTimeValue = secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 	} else if (remainingSeconds < 86400) {
-		// hours and minutes
 		const hrs = Math.floor(remainingSeconds / 3600);
 		const mins = Math.floor((remainingSeconds % 3600) / 60);
 		newTimeValue = mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
 	} else {
-		// days and hours
 		const days = Math.floor(remainingSeconds / 86400);
 		const hrs = Math.floor((remainingSeconds % 86400) / 3600);
 		newTimeValue = hrs > 0 ? `${days}d ${hrs}h` : `${days}d`;
@@ -124,24 +137,235 @@ function clearAllIndividualMonitors() {
 	individualMonitorTimeouts.clear();
 }
 
-async function fetchApi(endpoint, selections = "basic") {
-	if (!isApiKeySet()) return { error: { error: "API Key not set" } };
+function openDB() {
+	if (dbPromise) return dbPromise;
+	dbPromise = new Promise((resolve, reject) => {
+		const request = indexedDB.open(DB_NAME, DB_VERSION);
+		request.onerror = (event) => {
+			console.error("IndexedDB error:", event.target.errorCode);
+			reject(event.target.errorCode);
+		};
+		request.onsuccess = (event) => {
+			resolve(event.target.result);
+		};
+		request.onupgradeneeded = (event) => {
+			const db = event.target.result;
+			if (!db.objectStoreNames.contains(YATA_SPIES_STORE_NAME)) {
+				db.createObjectStore(YATA_SPIES_STORE_NAME, { keyPath: "factionID" });
+			}
+		};
+	});
+	return dbPromise;
+}
 
+async function getSpyDataFromDB(factionID) {
 	try {
-		const url = `https://api.torn.com/${endpoint}?key=${currentApiKey}&selections=${selections}`;
-		const response = await fetch(url);
-		const data = await response.json();
-		if (data?.error) console.error(`API Error (${endpoint}):`, data.error.error);
-		return data;
+		const db = await openDB();
+		return new Promise((resolve, reject) => {
+			const transaction = db.transaction([YATA_SPIES_STORE_NAME], "readonly");
+			const store = transaction.objectStore(YATA_SPIES_STORE_NAME);
+			const request = store.get(factionID);
+			request.onsuccess = (event) => resolve(event.target.result);
+			request.onerror = (event) => {
+				console.error("Error getting spy data from DB:", event.target.errorCode);
+				reject(event.target.errorCode);
+			};
+		});
 	} catch (error) {
-		console.error(`Error fetching API (${endpoint}):`, error);
-		return { error: { error: "Network or fetch error" } };
+		console.error("Failed to open DB for getSpyData:", error);
+		return null;
 	}
+}
+
+async function saveSpyDataToDB(factionID, spyData) {
+	try {
+		const db = await openDB();
+		return new Promise((resolve, reject) => {
+			const transaction = db.transaction([YATA_SPIES_STORE_NAME], "readwrite");
+			const store = transaction.objectStore(YATA_SPIES_STORE_NAME);
+			const item = {
+				factionID: factionID,
+				data: spyData,
+				timestamp: Date.now(),
+			};
+			const request = store.put(item);
+			request.onsuccess = () => resolve();
+			request.onerror = (event) => {
+				console.error("Error saving spy data to DB:", event.target.errorCode);
+				reject(event.target.errorCode);
+			};
+		});
+	} catch (error) {
+		console.error("Failed to open DB for saveSpyData:", error);
+	}
+}
+
+function isCacheValid(cachedItem) {
+	if (!cachedItem || !cachedItem.timestamp) return false;
+	return Date.now() - cachedItem.timestamp < CACHE_DURATION_MS;
+}
+
+async function clearOldSpyDataFromDB() {
+	try {
+		const db = await openDB();
+		const transaction = db.transaction([YATA_SPIES_STORE_NAME], "readwrite");
+		const store = transaction.objectStore(YATA_SPIES_STORE_NAME);
+		const request = store.openCursor();
+
+		request.onsuccess = (event) => {
+			const cursor = event.target.result;
+			if (cursor) {
+				if (!isCacheValid(cursor.value)) store.delete(cursor.primaryKey);
+				cursor.continue();
+			}
+		};
+		request.onerror = (event) => console.error("Error clearing old spy data from DB:", event.target.errorCode);
+	} catch (error) {
+		console.error("Failed to open DB for clearOldSpyDataFromDB:", error);
+	}
+}
+
+async function fetchApi(endpoint, selections = "basic", apiKey = currentApiKey) {
+	return new Promise((resolve, reject) => {
+		const isTornApi = endpoint.startsWith("user/") || endpoint.startsWith("faction/");
+		if (isTornApi && (!apiKey || apiKey === API_KEY_PLACEHOLDER)) {
+			console.warn("Stakeout Script: Torn API Key not set for endpoint:", endpoint);
+			resolve({ error: { error: "API Key not set" } });
+			return;
+		}
+		if (!isTornApi && !apiKey) {
+			// console.warn("Stakeout Script: API Key not set for external endpoint:", endpoint);
+			resolve({ error: { error: "API Key not set for external service" } });
+			return;
+		}
+
+		const baseUrl = isTornApi ? "https://api.torn.com/" : "";
+		let finalUrl;
+
+		if (isTornApi) {
+			finalUrl = `${baseUrl}${endpoint}?key=${apiKey}&selections=${selections}`;
+		} else {
+			if (endpoint.includes("?")) {
+				finalUrl = `${endpoint}&key=${apiKey}`;
+			} else {
+				finalUrl = `${endpoint}?key=${apiKey}`;
+			}
+		}
+
+		GM_xmlhttpRequest({
+			method: "GET",
+			url: finalUrl,
+			timeout: 15000,
+			onload: function (response) {
+				if (response.status >= 200 && response.status < 300) {
+					try {
+						const data = JSON.parse(response.responseText);
+						if (data?.error) {
+							const errorMsg = data.error.error || JSON.stringify(data.error);
+							console.error(`API Error (${finalUrl.split("?")[0]} - Status ${response.status}):`, errorMsg);
+						}
+						resolve(data);
+					} catch (e) {
+						console.error(`Error parsing JSON response from ${finalUrl.split("?")[0]}:`, e, "Response:", response.responseText);
+						resolve({ error: { error: "JSON Parse Error", details: e.message, response: response.responseText } });
+					}
+				} else {
+					console.error(`API Request Failed for ${finalUrl.split("?")[0]}: Status ${response.status}`, "Response:", response.responseText);
+					try {
+						const data = JSON.parse(response.responseText); // Attempt to parse error from body
+						resolve(data.error ? data : { error: { error: `HTTP Error ${response.status}`, response: response.responseText } });
+					} catch (e) {
+						resolve({ error: { error: `HTTP Error ${response.status}`, response: response.responseText } });
+					}
+				}
+			},
+			onerror: function (response) {
+				console.error(`Network Error for ${finalUrl.split("?")[0]}:`, response);
+				resolve({ error: { error: "Network Error", details: response.statusText || "Unknown network issue" } });
+			},
+			ontimeout: function () {
+				console.error(`Request Timeout for ${finalUrl.split("?")[0]}`);
+				resolve({ error: { error: "Request Timeout" } });
+			},
+		});
+	});
 }
 
 async function checkUserStatus(userID) {
 	const data = await fetchApi(`user/${userID}`);
 	return !data?.error && data?.status?.state === "Okay";
+}
+
+function formatStatValue(num) {
+	if (num === null || num === undefined || num === -1) return "N/A";
+	if (num === 0) return "0";
+	const suffixes = ["", "k", "M", "B", "T", "Q"];
+	let i = 0;
+	let tempNum = Math.abs(num);
+	while (tempNum >= 1000 && i < suffixes.length - 1) {
+		tempNum /= 1000;
+		i++;
+	}
+	const precision = i === 1 && tempNum < 100 ? 1 : i > 0 ? 2 : 0;
+	let formattedNum = (num / Math.pow(1000, i)).toFixed(precision);
+	formattedNum = formattedNum.replace(/\.0+$/, "");
+	return formattedNum + suffixes[i];
+}
+
+function formatSpyTimestamp(unixTimestamp) {
+	if (!unixTimestamp || unixTimestamp === 0) return "Unknown age";
+	const spyDate = new Date(unixTimestamp * 1000);
+	const now = new Date();
+	const diffMs = now - spyDate;
+	const diffSeconds = Math.floor(diffMs / 1000);
+	const diffMinutes = Math.floor(diffSeconds / 60);
+	const diffHours = Math.floor(diffMinutes / 60);
+	const diffDays = Math.floor(diffHours / 24);
+	const diffMonths = Math.floor(diffDays / 30.44);
+	const diffYears = Math.floor(diffDays / 365.25);
+
+	if (diffYears > 0) return `~${diffYears}y ago`;
+	if (diffMonths > 0) return `~${diffMonths}mo ago`;
+	if (diffDays > 0) return `~${diffDays}d ago`;
+	if (diffHours > 0) return `~${diffHours}h ago`;
+	if (diffMinutes > 0) return `~${diffMinutes}m ago`;
+	return "Just now";
+}
+
+async function fetchYataSpies(factionID) {
+	const yataApiKey = localStorage.getItem(YATA_API_KEY_STORAGE_KEY);
+	if (!yataApiKey) return null;
+
+	const cachedData = await getSpyDataFromDB(factionID);
+	if (cachedData && isCacheValid(cachedData)) return cachedData.data;
+
+	const endpoint = `https://yata.yt/api/v1/spies/?faction=${factionID}`;
+	const freshData = await fetchApi(endpoint, "", yataApiKey);
+
+	if (freshData && !freshData.error) {
+		await saveSpyDataToDB(factionID, freshData);
+		return freshData;
+	}
+	if (freshData?.error) {
+		const errorMessage = freshData.error.error || "Unknown YATA API error";
+		const errorCode = freshData.error.code;
+
+		if (errorCode === 2 && (errorMessage.includes("No spies for faction") || errorMessage.includes("No spies") || errorMessage.includes("faction not found")))
+			console.log("YATA: No spies for faction ID:", factionID, "or faction not found.");
+		else {
+			console.error("YATA Spies API Error:", errorMessage, errorCode ? `(Code: ${errorCode})` : `(Details: ${freshData.error.details || "N/A"})`);
+			const controlsContainer = document.getElementById(FACTION_CONTROLS_CONTAINER_ID);
+			if (controlsContainer && !document.getElementById("yata-api-error-message")) {
+				const errorMsgElement = createStyledElement(
+					"p",
+					{ color: "yellow", fontSize: "0.8em", marginLeft: "10px" },
+					{ id: "yata-api-error-message", textContent: `YATA API: ${errorMessage.substring(0, 50)}... (see console)` }
+				);
+				controlsContainer.appendChild(errorMsgElement);
+			}
+		}
+	}
+	return null;
 }
 
 async function checkIndividualUserAndAlert(alertedUserID) {
@@ -204,33 +428,25 @@ function createMemberElement(member, categoryName) {
 		display: "flex",
 		justifyContent: "space-between",
 		alignItems: "flex-start",
+		position: "relative",
 	});
 
 	let statusColor = "white";
-	if (member.status === "Okay") statusColor = "#4CAF50"; // Green
-	else if (member.status.includes("Hospital")) statusColor = "#FF9800"; // Orange
-	else if (member.status === "Traveling") statusColor = "#2196F3"; // Blue
-	else if (member.status === "Abroad") statusColor = "#9C27B0"; // Purple
-	else if (member.status.includes("Jail")) statusColor = member.status.includes("Federal") ? "#f44336" : "#FFEB3B"; // Red (Fed) or Yellow
+	if (member.status === "Okay") statusColor = "#4CAF50";
+	else if (member.status.includes("Hospital")) statusColor = "#FF9800";
+	else if (member.status === "Traveling") statusColor = "#2196F3";
+	else if (member.status === "Abroad") statusColor = "#9C27B0";
+	else if (member.status.includes("Jail")) statusColor = member.status.includes("Federal") ? "#f44336" : "#FFEB3B";
 	memberDiv.style.borderLeftColor = statusColor;
 
 	const memberInfoContainer = createStyledElement("div", { display: "flex", flexDirection: "column", flexGrow: 1, marginRight: "8px" });
-
-	const onlineStatusIcon = createStyledElement("span", {
-		width: "10px",
-		height: "10px",
-		borderRadius: "50%",
-		marginRight: "6px",
-		flexShrink: 0,
-	});
-
-	if (member.lastActionStatus === "Online") onlineStatusIcon.style.backgroundColor = "#4CAF50"; // Green
-	else if (member.lastActionStatus === "Idle") onlineStatusIcon.style.backgroundColor = "#FF9800"; // Orange
-	else onlineStatusIcon.style.backgroundColor = "#9E9E9E"; // Grey
+	const onlineStatusIcon = createStyledElement("span", { width: "10px", height: "10px", borderRadius: "50%", marginRight: "6px", flexShrink: 0 });
+	if (member.lastActionStatus === "Online") onlineStatusIcon.style.backgroundColor = "#4CAF50";
+	else if (member.lastActionStatus === "Idle") onlineStatusIcon.style.backgroundColor = "#FF9800";
+	else onlineStatusIcon.style.backgroundColor = "#9E9E9E";
 
 	const nameColor = member.status.includes("Jail") && !member.status.includes("Federal") ? "#333" : "#E0E0E0";
 	const nameSpan = createStyledElement("span", { fontWeight: "bold", color: nameColor }, { textContent: member.name });
-
 	const nameContainer = createStyledElement("div", { display: "flex", alignItems: "center", marginBottom: "1px" });
 	nameContainer.append(onlineStatusIcon, nameSpan);
 
@@ -239,15 +455,12 @@ function createMemberElement(member, categoryName) {
 		{ color: "#B0B0B0", fontSize: "0.85em", display: "block", marginTop: "2px" },
 		{ id: `status-desc-${member.userID}`, textContent: `(${member.description})` }
 	);
-
 	memberInfoContainer.append(nameContainer, statusDescSpan);
 
 	if (isTimedStatus && member.durationSeconds < 60 && member.durationSeconds !== Infinity && member.durationSeconds > 0) {
 		if (activeCountdownIntervals.has(member.userID)) clearInterval(activeCountdownIntervals.get(member.userID).intervalId);
-
 		const endTime = Date.now() + member.durationSeconds * 1000;
 		const baseDescriptionForTimer = member.description;
-
 		const intervalId = setInterval(() => {
 			const remainingSeconds = Math.max(0, Math.round((endTime - Date.now()) / 1000));
 			const currentDescSpan = document.getElementById(`status-desc-${member.userID}`);
@@ -265,6 +478,97 @@ function createMemberElement(member, categoryName) {
 	}
 
 	const actionsContainer = createStyledElement("div", { display: "flex", gap: "5px", flexShrink: 0, alignItems: "center" });
+
+	if (member.yataSpyData && (member.yataSpyData.total > 0 || Object.values(member.yataSpyData).some((v) => typeof v === "number" && v > 0 && v !== -1))) {
+		const spyButton = createStyledElement(
+			"button",
+			{
+				padding: "3px 5px",
+				fontSize: "1em",
+				color: "#f0f0f0",
+				backgroundColor: "#555",
+				textDecoration: "none",
+				borderRadius: "3px",
+				border: "1px solid #5a6268",
+				cursor: "pointer",
+				display: "inline-flex",
+				alignItems: "center",
+				lineHeight: "1",
+			},
+			{ innerHTML: "🕵️‍♂️" }
+		);
+
+		spyButton.onmouseover = (event) => {
+			let tooltip = document.getElementById(SPY_TOOLTIP_ID);
+			if (!tooltip) {
+				tooltip = createStyledElement(
+					"div",
+					{
+						position: "absolute",
+						backgroundColor: "#2c2c2c",
+						color: "#e0e0e0",
+						padding: "10px 12px",
+						borderRadius: "6px",
+						border: "1px solid #555",
+						zIndex: "10001",
+						fontSize: "0.9em",
+						whiteSpace: "nowrap",
+						boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+						pointerEvents: "none",
+						minWidth: "220px",
+					},
+					{ id: SPY_TOOLTIP_ID }
+				);
+				document.body.appendChild(tooltip);
+			}
+
+			const spy = member.yataSpyData;
+			let tooltipHTML = `
+                <div style="font-family: Verdana, Arial, sans-serif;">
+                    <div style="font-size: 1.15em; font-weight: bold; color: #76D7C4; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #4a4a4a; text-align: center;">
+                        YATA Spy Report
+                    </div>
+                    <div style="display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 5px 12px; margin-bottom: 10px; font-size: 0.95em;">
+                        <span style="font-weight: bold; color: #ccc;">Str:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(spy.strength)}</span>
+                        <span style="font-weight: bold; color: #ccc;">Def:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(spy.defense)}</span>
+                        <span style="font-weight: bold; color: #ccc;">Spd:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(spy.speed)}</span>
+                        <span style="font-weight: bold; color: #ccc;">Dex:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(spy.dexterity)}</span>
+                    </div>
+                    <div style="font-size: 1em; margin-bottom: 8px; padding-top: 8px; border-top: 1px solid #4a4a4a; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: bold; color: #ddd;">Total:</span>
+                        <span style="font-weight: bold; color: #58D68D; font-size: 1.1em;">${formatStatValue(spy.total)}</span>
+                    </div>
+                    <div style="font-size: 0.85em; color: #999; text-align: right; margin-top: 5px;">
+                        ${formatSpyTimestamp(
+													spy.update ||
+														Math.max(spy.strength_timestamp || 0, spy.speed_timestamp || 0, spy.defense_timestamp || 0, spy.dexterity_timestamp || 0, spy.total_timestamp || 0)
+												)}
+                    </div>
+                </div>
+            `;
+			tooltip.innerHTML = tooltipHTML;
+
+			const rect = spyButton.getBoundingClientRect();
+			let topPosition = rect.bottom + window.scrollY + 7;
+			let leftPosition = rect.left + window.scrollX;
+
+			tooltip.style.display = "block";
+
+			if (leftPosition + tooltip.offsetWidth > window.innerWidth - 10) leftPosition = rect.right + window.scrollX - tooltip.offsetWidth;
+			if (leftPosition < 10) leftPosition = 10;
+			if (topPosition + tooltip.offsetHeight > window.innerHeight - 10) topPosition = rect.top + window.scrollY - tooltip.offsetHeight - 7;
+			if (topPosition < 10) topPosition = 10;
+
+			tooltip.style.left = `${leftPosition}px`;
+			tooltip.style.top = `${topPosition}px`;
+		};
+		spyButton.onmouseout = () => {
+			const tooltip = document.getElementById(SPY_TOOLTIP_ID);
+			if (tooltip) tooltip.style.display = "none";
+		};
+		actionsContainer.appendChild(spyButton);
+	}
+
 	const profileButton = createStyledElement(
 		"a",
 		{
@@ -304,8 +608,8 @@ function createMemberElement(member, categoryName) {
 	);
 	attackButton.onmouseover = () => (attackButton.style.backgroundColor = "#d64537");
 	attackButton.onmouseout = () => (attackButton.style.backgroundColor = "#c0392b");
-	actionsContainer.append(profileButton, attackButton);
 
+	actionsContainer.append(profileButton, attackButton);
 	memberDiv.append(memberInfoContainer, actionsContainer);
 	return memberDiv;
 }
@@ -335,6 +639,7 @@ function createCategoryElement(categoryName, membersInCategory, factionID) {
 		display: "flex",
 		justifyContent: "space-between",
 		alignItems: "center",
+        fontSize: "1.25em",
 	});
 	const updateHeaderContent = (isCollapsed) => (categoryHeader.innerHTML = `${categoryName} <span>(${membersInCategory.length}) ${isCollapsed ? "▼" : "▲"}</span>`);
 	updateHeaderContent(isCollapsedStored);
@@ -347,7 +652,6 @@ function createCategoryElement(categoryName, membersInCategory, factionID) {
 	});
 
 	membersInCategory.forEach((member) => memberListDiv.appendChild(createMemberElement(member, categoryName)));
-
 	categoryDiv.append(categoryHeader, memberListDiv);
 	return categoryDiv;
 }
@@ -404,7 +708,10 @@ function updateFactionDisplay(memberStatusesToDisplay, factionID) {
 		if (memberInNewData) {
 			const duration = memberInNewData.durationSeconds ?? parseTimeToSeconds(memberInNewData.description);
 			const isEligibleForCountdown =
-				duration < 60 && duration !== Infinity && duration > 0 && (memberInNewData.status.includes("Hospital") || memberInNewData.status.includes("Jail"));
+				duration < 60 &&
+				duration !== Infinity &&
+				duration > 0 &&
+				(memberInNewData.status.includes("Hospital") || memberInNewData.status.includes("Jail") || memberInNewData.status.includes("Traveling"));
 			if (isEligibleForCountdown) shouldClear = false;
 		}
 		if (shouldClear || !currentMemberIDsInDisplay.has(userId)) {
@@ -418,7 +725,6 @@ function updateFactionDisplay(memberStatusesToDisplay, factionID) {
 		member.durationSeconds = member.durationSeconds ?? parseTimeToSeconds(member.description);
 		const { status, description } = member;
 		const descLower = description.toLowerCase();
-
 		if (status === "Hospital") {
 			if (descLower.includes(" hospital in ") || (descLower.includes("in a ") && descLower.includes(" hospital")))
 				categorizedMembers[STATUS_CATEGORIES.HOSPITAL_ABROAD].push(member);
@@ -433,7 +739,6 @@ function updateFactionDisplay(memberStatusesToDisplay, factionID) {
 	CATEGORY_ORDER.forEach((categoryName) => {
 		const membersInCategory = categorizedMembers[categoryName];
 		if (membersInCategory.length === 0) return;
-
 		membersInCategory.sort((a, b) => {
 			const durA = a.durationSeconds;
 			const durB = b.durationSeconds;
@@ -455,35 +760,38 @@ async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox) {
 
 	const usersOkayInPreviousCycle = new Set(previouslyOkayFactionUserIDs);
 	previouslyOkayFactionUserIDs.clear();
+	document.getElementById("yata-api-error-message")?.remove();
 
-	const data = await fetchApi(`faction/${factionID}`);
-	if (data?.error || !data?.members) {
-		console.error("Error fetching or processing faction data:", data?.error?.error || "No member data");
+	const tornFactionData = await fetchApi(`faction/${factionID}`);
+	if (tornFactionData?.error || !tornFactionData?.members) {
+		console.error("Error fetching or processing faction data:", tornFactionData?.error?.error || "No member data");
 		const contentWrapper = document.getElementById(CONTENT_WRAPPER_ID);
 		if (contentWrapper) {
 			contentWrapper.innerHTML = `<p style="color: #ff6666; text-align: center; padding: 10px;">Error fetching faction data: ${
-				data?.error?.error || "No member data"
+				tornFactionData?.error?.error || "No member data"
 			}. Check API key and network.</p>`;
 		}
 		return;
 	}
 
-	currentDisplayableMemberStatuses = Object.entries(data.members).map(([userID, memberData]) => ({
+	const yataFullResponse = await fetchYataSpies(factionID);
+	currentYataSpies = yataFullResponse ? yataFullResponse.spies : {};
+
+	currentDisplayableMemberStatuses = Object.entries(tornFactionData.members).map(([userID, memberData]) => ({
 		userID,
 		name: memberData.name,
 		status: memberData.status.state,
 		description: memberData.status.description,
 		durationSeconds: parseTimeToSeconds(memberData.status.description),
 		lastActionStatus: memberData.last_action?.status || "Offline",
+		yataSpyData: currentYataSpies[userID] || null,
 	}));
 
 	let newlyOkayPlayerDetected = false;
 	currentDisplayableMemberStatuses.forEach((member) => {
 		if (member.status === "Okay") {
 			previouslyOkayFactionUserIDs.add(member.userID);
-			if (!usersOkayInPreviousCycle.has(member.userID)) {
-				newlyOkayPlayerDetected = true;
-			}
+			if (!usersOkayInPreviousCycle.has(member.userID)) newlyOkayPlayerDetected = true;
 		}
 	});
 
@@ -491,10 +799,202 @@ async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox) {
 	updateFactionDisplay(currentDisplayableMemberStatuses, factionID);
 }
 
+function closeSpiesModal() {
+	const overlay = document.getElementById(SPIES_MODAL_OVERLAY_ID);
+	if (overlay) {
+		overlay.remove();
+	}
+	if (spiesModalEscapeKeyListener) {
+		document.removeEventListener("keydown", spiesModalEscapeKeyListener);
+		spiesModalEscapeKeyListener = null;
+	}
+}
+
+function saveSpyApiKeys() {
+	const yataKeyInput = document.getElementById(YATA_API_KEY_INPUT_ID);
+	const tsKeyInput = document.getElementById(TORNSTATS_API_KEY_INPUT_ID);
+
+	if (yataKeyInput.value.trim()) localStorage.setItem(YATA_API_KEY_STORAGE_KEY, yataKeyInput.value.trim());
+	else localStorage.removeItem(YATA_API_KEY_STORAGE_KEY);
+
+	if (tsKeyInput.value.trim()) localStorage.setItem(TORNSTATS_API_KEY_STORAGE_KEY, tsKeyInput.value.trim());
+	else localStorage.removeItem(TORNSTATS_API_KEY_STORAGE_KEY);
+	closeSpiesModal();
+
+	const currentFactionID = new URLSearchParams(window.location.search).get("ID");
+	const stakeoutCheckbox = document.getElementById("factionStakeoutCheckbox");
+	if (currentFactionID && stakeoutCheckbox) {
+		clearSpyDataForFactionFromDB(currentFactionID).then(() => fetchMonitorAndUpdate(currentFactionID, stakeoutCheckbox));
+	}
+}
+
+async function clearSpyDataForFactionFromDB(factionID) {
+	try {
+		const db = await openDB();
+		return new Promise((resolve, reject) => {
+			const transaction = db.transaction([YATA_SPIES_STORE_NAME], "readwrite");
+			const store = transaction.objectStore(YATA_SPIES_STORE_NAME);
+			const request = store.delete(factionID);
+			request.onsuccess = () => resolve();
+			request.onerror = (event) => {
+				console.error("Error deleting spy data for faction from DB:", event.target.errorCode);
+				reject(event.target.errorCode);
+			};
+		});
+	} catch (error) {
+		console.error("Failed to open DB for clearSpyDataForFaction:", error);
+	}
+}
+
+function openSpiesModal() {
+	if (document.getElementById(SPIES_MODAL_ID)) return;
+	if (spiesModalEscapeKeyListener) {
+		document.removeEventListener("keydown", spiesModalEscapeKeyListener);
+		spiesModalEscapeKeyListener = null;
+	}
+
+	const overlay = createStyledElement(
+		"div",
+		{
+			position: "fixed",
+			top: "0",
+			left: "0",
+			width: "100%",
+			height: "100%",
+			backgroundColor: "rgba(0,0,0,0.7)",
+			zIndex: "10000",
+			display: "flex",
+			alignItems: "center",
+			justifyContent: "center",
+		},
+		{ id: SPIES_MODAL_OVERLAY_ID }
+	);
+	const modal = createStyledElement(
+		"div",
+		{
+			backgroundColor: "#2c2c2c",
+			color: "#f0f0f0",
+			padding: "25px",
+			borderRadius: "10px",
+			border: "1px solid #555",
+			width: "90%",
+			maxWidth: "550px",
+			boxShadow: "0 5px 15px rgba(0,0,0,0.5)",
+			fontFamily: "Verdana, Arial, sans-serif",
+		},
+		{ id: SPIES_MODAL_ID }
+	);
+	const title = createStyledElement(
+		"h2",
+		{
+			margin: "0 0 15px 0",
+			color: "#76D7C4",
+			textAlign: "center",
+			borderBottom: "1px solid #444",
+			paddingBottom: "10px",
+		},
+		{ textContent: "Configure Spy Data Sources" }
+	);
+	const description = createStyledElement(
+		"p",
+		{
+			fontSize: "0.9em",
+			color: "#ccc",
+			marginBottom: "20px",
+			lineHeight: "1.5",
+		},
+		{
+			innerHTML:
+				"Enter your API key(s) for YATA and/or TornStats to fetch spy data for faction members. <br>Make sure these are the same API key(s) you use specific to those services.",
+		}
+	);
+	const cardsContainer = createStyledElement("div", { display: "flex", flexDirection: "column", gap: "20px", marginBottom: "25px" });
+	const yataCard = createStyledElement("div", { backgroundColor: "#3a3a3a", padding: "15px", borderRadius: "6px", borderLeft: "4px solid #2980B9" });
+	const yataTitle = createStyledElement("h3", { margin: "0 0 10px 0", color: "#AED6F1" }, { textContent: "YATA" });
+	const yataInput = createStyledElement(
+		"input",
+		{
+			width: "calc(100% - 12px)",
+			padding: "8px",
+			borderRadius: "3px",
+			border: "1px solid #555",
+			backgroundColor: "#222",
+			color: "#f0f0f0",
+			fontSize: "0.9em",
+		},
+		{ type: "text", id: YATA_API_KEY_INPUT_ID, value: localStorage.getItem(YATA_API_KEY_STORAGE_KEY) || "" }
+	);
+	yataCard.append(yataTitle, yataInput);
+	const tsCard = createStyledElement("div", { backgroundColor: "#3a3a3a", padding: "15px", borderRadius: "6px", borderLeft: "4px solid #AF7AC5" });
+	const tsTitle = createStyledElement("h3", { margin: "0 0 10px 0", color: "#D7BDE2" }, { textContent: "TornStats - Not built yet" });
+	const tsInput = createStyledElement(
+		"input",
+		{
+			width: "calc(100% - 12px)",
+			padding: "8px",
+			borderRadius: "3px",
+			border: "1px solid #555",
+			backgroundColor: "#222",
+			color: "#f0f0f0",
+			fontSize: "0.9em",
+		},
+		{ type: "text", id: TORNSTATS_API_KEY_INPUT_ID, value: localStorage.getItem(TORNSTATS_API_KEY_STORAGE_KEY) || "" }
+	);
+	tsCard.append(tsTitle, tsInput);
+	cardsContainer.append(yataCard, tsCard);
+	const actionsContainer = createStyledElement("div", { display: "flex", justifyContent: "flex-end", gap: "10px" });
+	const saveButton = createStyledElement(
+		"button",
+		{
+			padding: "8px 15px",
+			backgroundColor: "#4CAF50",
+			color: "white",
+			border: "none",
+			borderRadius: "4px",
+			cursor: "pointer",
+			fontSize: "0.95em",
+		},
+		{ textContent: "Save & Close" }
+	);
+	saveButton.onmouseover = () => (saveButton.style.backgroundColor = "#45a049");
+	saveButton.onmouseout = () => (saveButton.style.backgroundColor = "#4CAF50");
+	saveButton.addEventListener("click", saveSpyApiKeys);
+	const closeButton = createStyledElement(
+		"button",
+		{
+			padding: "8px 15px",
+			backgroundColor: "#777",
+			color: "white",
+			border: "none",
+			borderRadius: "4px",
+			cursor: "pointer",
+			fontSize: "0.95em",
+		},
+		{ textContent: "Cancel" }
+	);
+	closeButton.onmouseover = () => (closeButton.style.backgroundColor = "#888");
+	closeButton.onmouseout = () => (closeButton.style.backgroundColor = "#777");
+	closeButton.addEventListener("click", closeSpiesModal);
+	actionsContainer.append(closeButton, saveButton);
+	modal.append(title, description, cardsContainer, actionsContainer);
+	overlay.appendChild(modal);
+	document.body.appendChild(overlay);
+
+	overlay.addEventListener("click", (e) => {
+		if (e.target === overlay) closeSpiesModal();
+	});
+
+	spiesModalEscapeKeyListener = (e) => {
+		if (e.key === "Escape") {
+			closeSpiesModal();
+		}
+	};
+	document.addEventListener("keydown", spiesModalEscapeKeyListener);
+}
+
 function addFactionStakeoutElements(factionPageElement, factionID) {
 	let monitorIntervalId = null;
 	document.getElementById(FACTION_CONTROLS_CONTAINER_ID)?.remove();
-
 	const controlsContainer = createStyledElement(
 		"div",
 		{
@@ -511,7 +1011,6 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		},
 		{ id: FACTION_CONTROLS_CONTAINER_ID }
 	);
-
 	const monitorControls = createStyledElement("div", { display: "flex", alignItems: "center" });
 	const stakeoutCheckbox = createStyledElement("input", { marginRight: "5px", cursor: "pointer" }, { type: "checkbox", id: "factionStakeoutCheckbox" });
 	const intervalDropdown = createStyledElement(
@@ -527,7 +1026,6 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		intervalDropdown,
 		createStyledElement("label", { cursor: "pointer" }, { htmlFor: "factionStakeoutInterval", textContent: "seconds" })
 	);
-
 	const apiKeyControls = createStyledElement("div", { display: "flex", alignItems: "center" });
 	const apiKeyButton = createStyledElement(
 		"button",
@@ -548,7 +1046,6 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		}
 	});
 	apiKeyControls.appendChild(apiKeyButton);
-
 	const displayToggleControls = createStyledElement("div", { display: "flex", alignItems: "center" });
 	const isInitiallyCollapsed = localStorage.getItem(MAIN_DISPLAY_COLLAPSED_KEY) === "true";
 	const toggleDisplayButton = createStyledElement(
@@ -566,9 +1063,17 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		}
 	});
 	displayToggleControls.appendChild(toggleDisplayButton);
-
-	controlsContainer.append(monitorControls, apiKeyControls, displayToggleControls);
-
+	const spiesControls = createStyledElement("div", { display: "flex", alignItems: "center" });
+	const spiesButton = createStyledElement(
+		"button",
+		{ padding: "4px 8px", backgroundColor: "rgb(66 71 207)", color: "white", border: "1px solid rgb(66 71 207)", borderRadius: "3px", cursor: "pointer", marginLeft: "10px" },
+		{ textContent: "Spies Config" }
+	);
+	spiesButton.onmouseover = () => (spiesButton.style.backgroundColor = "#2E86C1");
+	spiesButton.onmouseout = () => (spiesButton.style.backgroundColor = "#3498DB");
+	spiesButton.addEventListener("click", openSpiesModal);
+	spiesControls.appendChild(spiesButton);
+	controlsContainer.append(monitorControls, apiKeyControls, displayToggleControls, spiesControls);
 	const startMonitoring = (intervalSeconds) => {
 		if (monitorIntervalId) clearInterval(monitorIntervalId);
 		clearAllIndividualMonitors();
@@ -576,24 +1081,22 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		fetchMonitorAndUpdate(factionID, stakeoutCheckbox);
 		monitorIntervalId = setInterval(() => fetchMonitorAndUpdate(factionID, stakeoutCheckbox), intervalSeconds * 1000);
 	};
-
 	const stopMonitoring = () => {
 		if (monitorIntervalId) clearInterval(monitorIntervalId);
 		monitorIntervalId = null;
 		clearAllIndividualMonitors();
 		clearAllCountdownIntervals();
 		previouslyOkayFactionUserIDs.clear();
+		currentYataSpies = {};
+		document.getElementById("yata-api-error-message")?.remove();
 	};
-
 	stakeoutCheckbox.addEventListener("change", () => {
 		if (stakeoutCheckbox.checked) startMonitoring(parseInt(intervalDropdown.value));
 		else stopMonitoring();
 	});
-
 	intervalDropdown.addEventListener("change", () => {
 		if (stakeoutCheckbox.checked) startMonitoring(parseInt(intervalDropdown.value));
 	});
-
 	factionPageElement.insertBefore(controlsContainer, factionPageElement.firstChild);
 }
 
@@ -604,19 +1107,16 @@ function initialFactionLoad(factionID) {
 function addStakeoutElementsToProfiles(statusElement) {
 	let intervalId = null;
 	let profileUserWasOkay = false;
-
 	const stakeoutContainer = createStyledElement("div", { float: "right", paddingRight: "10px", display: "flex", alignItems: "center" });
 	const stakeoutCheckbox = createStyledElement("input", { marginRight: "5px", cursor: "pointer" }, { type: "checkbox", id: "stakeoutCheckbox" });
 	const intervalDropdown = createStyledElement("select", { marginRight: "5px" }, { id: "stakeoutInterval" });
 	[1, 2, 3, 4, 5, 30, 60].forEach((val) => intervalDropdown.add(createStyledElement("option", {}, { value: val, text: val.toString() })));
-
 	stakeoutContainer.append(
 		stakeoutCheckbox,
 		createStyledElement("label", { marginRight: "5px", cursor: "pointer" }, { htmlFor: "stakeoutCheckbox", textContent: "Check status every" }),
 		intervalDropdown,
 		createStyledElement("label", { cursor: "pointer" }, { htmlFor: "stakeoutInterval", textContent: "seconds" })
 	);
-
 	const startStakeout = async (intervalSeconds) => {
 		if (intervalId) clearInterval(intervalId);
 		const userID = new URLSearchParams(window.location.search).get("XID");
@@ -625,7 +1125,6 @@ function addStakeoutElementsToProfiles(statusElement) {
 			stakeoutCheckbox.checked = false;
 			return;
 		}
-
 		const isNowOkay = await checkUserStatus(userID);
 		if (isNowOkay) {
 			if (!profileUserWasOkay) playAlertSound();
@@ -633,7 +1132,6 @@ function addStakeoutElementsToProfiles(statusElement) {
 			stakeoutCheckbox.checked = false;
 			return;
 		} else profileUserWasOkay = false;
-
 		intervalId = setInterval(async () => {
 			const isCurrentlyOkay = await checkUserStatus(userID);
 			if (isCurrentlyOkay) {
@@ -649,7 +1147,6 @@ function addStakeoutElementsToProfiles(statusElement) {
 		if (intervalId) clearInterval(intervalId);
 		intervalId = null;
 	};
-
 	stakeoutCheckbox.addEventListener("change", () => {
 		if (stakeoutCheckbox.checked) {
 			profileUserWasOkay = false;
@@ -659,17 +1156,16 @@ function addStakeoutElementsToProfiles(statusElement) {
 	intervalDropdown.addEventListener("change", () => {
 		if (stakeoutCheckbox.checked) startStakeout(parseInt(intervalDropdown.value));
 	});
-
 	statusElement.appendChild(stakeoutContainer);
 }
 
 function observe() {
-	if (window.StakeOutInterval) clearInterval(window.StakeOutInterval);
+	clearOldSpyDataFromDB();
 
+	if (window.StakeOutInterval) clearInterval(window.StakeOutInterval);
 	window.StakeOutInterval = setInterval(() => {
 		const profileStatusElement = document.querySelector(PROFILE_STATUS_SELECTOR);
 		if (profileStatusElement && !document.getElementById("stakeoutCheckbox")) addStakeoutElementsToProfiles(profileStatusElement);
-
 		const factionProfileElement = document.querySelector(FACTION_STATUS_SELECTOR);
 		if (factionProfileElement) {
 			if (!document.getElementById(FACTION_CONTROLS_CONTAINER_ID)) {
@@ -680,7 +1176,6 @@ function observe() {
 				}
 			}
 		}
-
 		if ((profileStatusElement && document.getElementById("stakeoutCheckbox")) || (factionProfileElement && document.getElementById(FACTION_CONTROLS_CONTAINER_ID)))
 			clearInterval(window.StakeOutInterval);
 	}, 500);
