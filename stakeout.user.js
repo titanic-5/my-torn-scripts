@@ -1070,7 +1070,7 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		{ textContent: "Spies Config" }
 	);
 	spiesButton.onmouseover = () => (spiesButton.style.backgroundColor = "#2E86C1");
-	spiesButton.onmouseout = () => (spiesButton.style.backgroundColor = "#3498DB");
+	spiesButton.onmouseout = () => (spiesButton.style.backgroundColor = "rgb(66 71 207)");
 	spiesButton.addEventListener("click", openSpiesModal);
 	spiesControls.appendChild(spiesButton);
 	controlsContainer.append(monitorControls, apiKeyControls, displayToggleControls, spiesControls);
