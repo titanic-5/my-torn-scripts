@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    http://tampermonkey.net/
-// @version      2.3.0
+// @version      2.3.1
 // @description  Stakeout factions or individual users
 // @author       Titanic_
 // @match        https://www.torn.com/profiles.php?XID=*
@@ -194,7 +194,7 @@ function createMemberElement(member, categoryName) {
 
 	if (isTimedStatus && member.durationSeconds < CRITICAL_TIME_THRESHOLD && member.durationSeconds !== Infinity && member.durationSeconds > 0) {
 		if (!individualMonitorTimeouts.has(member.userID)) {
-			const checkDelayMs = Math.max(1000, (member.durationSeconds + 2) * 1000); // Check 2s after expected out time
+			const checkDelayMs = Math.max(1000, (member.durationSeconds) * 1000);
 			const timeoutId = setTimeout(() => checkIndividualUserAndAlert(member.userID), checkDelayMs);
 			individualMonitorTimeouts.set(member.userID, timeoutId);
 		}
