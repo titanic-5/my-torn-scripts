@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    http://tampermonkey.net/
-// @version      2.3.1
+// @version      2.4.0
 // @description  Stakeout factions or individual users
 // @author       Titanic_
 // @match        https://www.torn.com/profiles.php?XID=*
@@ -18,7 +18,7 @@ const PROFILE_STATUS_SELECTOR = "#profileroot div.profile-status div.title-black
 const FACTION_STATUS_SELECTOR = "div#factions > div#react-root";
 const ALERT_SOUND_URL = "https://www.myinstants.com/media/sounds/alert.mp3";
 
-const CRITICAL_TIME_THRESHOLD = 40; // Seconds: If hospitalized, queue API call for user status check
+const CRITICAL_TIME_THRESHOLD = 40; // Seconds: If hospitalized < this time, queue API call for user endpoint check
 
 const DISPLAY_CONTAINER_ID = "faction-members-status-display";
 const CONTENT_WRAPPER_ID = "faction-members-content-wrapper";
@@ -50,8 +50,9 @@ const CATEGORY_ORDER = [
 ];
 
 let individualMonitorTimeouts = new Map();
-let currentDisplayableMemberStatuses = [];
 let activeCountdownIntervals = new Map();
+let currentDisplayableMemberStatuses = [];
+let previouslyOkayFactionUserIDs = new Set();
 
 function createStyledElement(tag, styles = {}, attributes = {}) {
 	const element = document.createElement(tag);
@@ -101,13 +102,8 @@ function formatTimeDescription(baseDescription, remainingSeconds) {
 		newTimeValue = hrs > 0 ? `${days}d ${hrs}h` : `${days}d`;
 	}
 
-	if (match && match[0]) {
-		const originalPrefix = match[1];
-		return baseDescription.replace(match[0], `${originalPrefix}${newTimeValue}`);
-	} else {
-		console.warn("formatTimeDescription: baseDescription did not match expected time pattern:", baseDescription);
-		return `${baseDescription} (${newTimeValue})`;
-	}
+	if (match && match[0]) return baseDescription.replace(match[0], `${match[1]}${newTimeValue}`);
+	else return `${baseDescription} (${newTimeValue})`;
 }
 
 function isApiKeySet() {
@@ -129,17 +125,13 @@ function clearAllIndividualMonitors() {
 }
 
 async function fetchApi(endpoint, selections = "basic") {
-	if (!isApiKeySet()) {
-		console.warn("Stakeout Script: API Key not set for endpoint:", endpoint);
-		return { error: { error: "API Key not set" } };
-	}
+	if (!isApiKeySet()) return { error: { error: "API Key not set" } };
+
 	try {
 		const url = `https://api.torn.com/${endpoint}?key=${currentApiKey}&selections=${selections}`;
 		const response = await fetch(url);
 		const data = await response.json();
-		if (data?.error) {
-			console.error(`API Error (${endpoint}):`, data.error.error);
-		}
+		if (data?.error) console.error(`API Error (${endpoint}):`, data.error.error);
 		return data;
 	} catch (error) {
 		console.error(`Error fetching API (${endpoint}):`, error);
@@ -171,12 +163,15 @@ async function checkIndividualUserAndAlert(alertedUserID) {
 	if (data?.error) return;
 
 	if (data?.status?.state === "Okay") {
-		playAlertSound();
+		if (!previouslyOkayFactionUserIDs.has(alertedUserID)) playAlertSound();
+		previouslyOkayFactionUserIDs.add(alertedUserID);
+
 		const memberToUpdate = currentDisplayableMemberStatuses.find((m) => m.userID === alertedUserID);
 		if (memberToUpdate) {
 			memberToUpdate.status = "Okay";
-			memberToUpdate.description = "Available (recently checked!)";
+			memberToUpdate.description = data.status.description || "Available";
 			memberToUpdate.durationSeconds = 0;
+			memberToUpdate.lastActionStatus = data.last_action?.status || memberToUpdate.lastActionStatus;
 		}
 
 		if (activeCountdownIntervals.has(alertedUserID)) {
@@ -194,7 +189,7 @@ function createMemberElement(member, categoryName) {
 
 	if (isTimedStatus && member.durationSeconds < CRITICAL_TIME_THRESHOLD && member.durationSeconds !== Infinity && member.durationSeconds > 0) {
 		if (!individualMonitorTimeouts.has(member.userID)) {
-			const checkDelayMs = Math.max(1000, (member.durationSeconds) * 1000);
+			const checkDelayMs = Math.max(1000, member.durationSeconds * 1000);
 			const timeoutId = setTimeout(() => checkIndividualUserAndAlert(member.userID), checkDelayMs);
 			individualMonitorTimeouts.set(member.userID, timeoutId);
 		}
@@ -233,11 +228,11 @@ function createMemberElement(member, categoryName) {
 	else if (member.lastActionStatus === "Idle") onlineStatusIcon.style.backgroundColor = "#FF9800"; // Orange
 	else onlineStatusIcon.style.backgroundColor = "#9E9E9E"; // Grey
 
-	const nameColor = member.status.includes("Jail") && member.status !== "Federal jail" ? "#333" : "#E0E0E0";
+	const nameColor = member.status.includes("Jail") && !member.status.includes("Federal") ? "#333" : "#E0E0E0";
 	const nameSpan = createStyledElement("span", { fontWeight: "bold", color: nameColor }, { textContent: member.name });
 
-	const nameLineContainer = createStyledElement("div", { display: "flex", alignItems: "center", marginBottom: "1px" });
-	nameLineContainer.append(onlineStatusIcon, nameSpan);
+	const nameContainer = createStyledElement("div", { display: "flex", alignItems: "center", marginBottom: "1px" });
+	nameContainer.append(onlineStatusIcon, nameSpan);
 
 	const statusDescSpan = createStyledElement(
 		"span",
@@ -245,21 +240,18 @@ function createMemberElement(member, categoryName) {
 		{ id: `status-desc-${member.userID}`, textContent: `(${member.description})` }
 	);
 
-	memberInfoContainer.append(nameLineContainer, statusDescSpan);
+	memberInfoContainer.append(nameContainer, statusDescSpan);
 
 	if (isTimedStatus && member.durationSeconds < 60 && member.durationSeconds !== Infinity && member.durationSeconds > 0) {
-		if (activeCountdownIntervals.has(member.userID)) {
-			clearInterval(activeCountdownIntervals.get(member.userID).intervalId);
-		}
+		if (activeCountdownIntervals.has(member.userID)) clearInterval(activeCountdownIntervals.get(member.userID).intervalId);
+
 		const endTime = Date.now() + member.durationSeconds * 1000;
 		const baseDescriptionForTimer = member.description;
 
 		const intervalId = setInterval(() => {
 			const remainingSeconds = Math.max(0, Math.round((endTime - Date.now()) / 1000));
 			const currentDescSpan = document.getElementById(`status-desc-${member.userID}`);
-			if (currentDescSpan) {
-				currentDescSpan.textContent = `(${formatTimeDescription(baseDescriptionForTimer, remainingSeconds)})`;
-			}
+			if (currentDescSpan) currentDescSpan.textContent = `(${formatTimeDescription(baseDescriptionForTimer, remainingSeconds)})`;
 			if (remainingSeconds <= 0) {
 				clearInterval(intervalId);
 				activeCountdownIntervals.delete(member.userID);
@@ -268,7 +260,6 @@ function createMemberElement(member, categoryName) {
 		activeCountdownIntervals.set(member.userID, { intervalId, originalDescription: baseDescriptionForTimer });
 		statusDescSpan.textContent = `(${formatTimeDescription(baseDescriptionForTimer, Math.max(0, member.durationSeconds))})`;
 	} else if (activeCountdownIntervals.has(member.userID)) {
-		// Clear if no longer eligible for countdown
 		clearInterval(activeCountdownIntervals.get(member.userID).intervalId);
 		activeCountdownIntervals.delete(member.userID);
 	}
@@ -355,9 +346,7 @@ function createCategoryElement(categoryName, membersInCategory, factionID) {
 		localStorage.setItem(storageKey, JSON.stringify(!isCurrentlyCollapsed));
 	});
 
-	membersInCategory.forEach((member) => {
-		memberListDiv.appendChild(createMemberElement(member, categoryName));
-	});
+	membersInCategory.forEach((member) => memberListDiv.appendChild(createMemberElement(member, categoryName)));
 
 	categoryDiv.append(categoryHeader, memberListDiv);
 	return categoryDiv;
@@ -415,10 +404,7 @@ function updateFactionDisplay(memberStatusesToDisplay, factionID) {
 		if (memberInNewData) {
 			const duration = memberInNewData.durationSeconds ?? parseTimeToSeconds(memberInNewData.description);
 			const isEligibleForCountdown =
-				duration < 60 &&
-				duration !== Infinity &&
-				duration > 0 &&
-				(memberInNewData.status.includes("Hospital") || memberInNewData.status.includes("Traveling") || memberInNewData.status.includes("Jail"));
+				duration < 60 && duration !== Infinity && duration > 0 && (memberInNewData.status.includes("Hospital") || memberInNewData.status.includes("Jail"));
 			if (isEligibleForCountdown) shouldClear = false;
 		}
 		if (shouldClear || !currentMemberIDsInDisplay.has(userId)) {
@@ -434,7 +420,6 @@ function updateFactionDisplay(memberStatusesToDisplay, factionID) {
 		const descLower = description.toLowerCase();
 
 		if (status === "Hospital") {
-			// Differentiate based on keywords in description for abroad hospitals
 			if (descLower.includes(" hospital in ") || (descLower.includes("in a ") && descLower.includes(" hospital")))
 				categorizedMembers[STATUS_CATEGORIES.HOSPITAL_ABROAD].push(member);
 			else categorizedMembers[STATUS_CATEGORIES.HOSPITAL_TORN].push(member);
@@ -453,10 +438,10 @@ function updateFactionDisplay(memberStatusesToDisplay, factionID) {
 			const durA = a.durationSeconds;
 			const durB = b.durationSeconds;
 			if (durA !== Infinity && durB !== Infinity) {
-				if (durA !== durB) return durA - durB; // Sort by shortest duration first
-			} else if (durA !== Infinity) return -1; // Finite durations before infinite
-			else if (durB !== Infinity) return 1; // Infinite durations after finite
-			return a.name.localeCompare(b.name); // Then by name
+				if (durA !== durB) return durA - durB;
+			} else if (durA !== Infinity) return -1;
+			else if (durB !== Infinity) return 1;
+			return a.name.localeCompare(b.name);
 		});
 		contentWrapper.appendChild(createCategoryElement(categoryName, membersInCategory, factionID));
 	});
@@ -467,6 +452,9 @@ async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox) {
 		updateFactionDisplay([], factionID);
 		return;
 	}
+
+	const usersOkayInPreviousCycle = new Set(previouslyOkayFactionUserIDs);
+	previouslyOkayFactionUserIDs.clear();
 
 	const data = await fetchApi(`faction/${factionID}`);
 	if (data?.error || !data?.members) {
@@ -489,15 +477,23 @@ async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox) {
 		lastActionStatus: memberData.last_action?.status || "Offline",
 	}));
 
-	if (stakeoutCheckbox?.checked && currentDisplayableMemberStatuses.some((member) => member.status === "Okay")) {
-		playAlertSound();
-	}
+	let newlyOkayPlayerDetected = false;
+	currentDisplayableMemberStatuses.forEach((member) => {
+		if (member.status === "Okay") {
+			previouslyOkayFactionUserIDs.add(member.userID);
+			if (!usersOkayInPreviousCycle.has(member.userID)) {
+				newlyOkayPlayerDetected = true;
+			}
+		}
+	});
+
+	if (stakeoutCheckbox?.checked && newlyOkayPlayerDetected) playAlertSound();
 	updateFactionDisplay(currentDisplayableMemberStatuses, factionID);
 }
 
 function addFactionStakeoutElements(factionPageElement, factionID) {
 	let monitorIntervalId = null;
-	document.getElementById(FACTION_CONTROLS_CONTAINER_ID)?.remove(); // Remove existing if any
+	document.getElementById(FACTION_CONTROLS_CONTAINER_ID)?.remove();
 
 	const controlsContainer = createStyledElement(
 		"div",
@@ -516,7 +512,6 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		{ id: FACTION_CONTROLS_CONTAINER_ID }
 	);
 
-	// Monitoring Controls
 	const monitorControls = createStyledElement("div", { display: "flex", alignItems: "center" });
 	const stakeoutCheckbox = createStyledElement("input", { marginRight: "5px", cursor: "pointer" }, { type: "checkbox", id: "factionStakeoutCheckbox" });
 	const intervalDropdown = createStyledElement(
@@ -525,7 +520,7 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		{ id: "factionStakeoutInterval" }
 	);
 	[30, 60].forEach((val) => intervalDropdown.add(createStyledElement("option", { backgroundColor: "#222", color: "white" }, { value: val, text: val.toString() })));
-	intervalDropdown.value = "30"; // Default to 30 seconds
+	intervalDropdown.value = "30";
 	monitorControls.append(
 		stakeoutCheckbox,
 		createStyledElement("label", { marginRight: "5px", cursor: "pointer" }, { htmlFor: "factionStakeoutCheckbox", textContent: "Monitor faction every" }),
@@ -533,7 +528,6 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		createStyledElement("label", { cursor: "pointer" }, { htmlFor: "factionStakeoutInterval", textContent: "seconds" })
 	);
 
-	// API Key Controls
 	const apiKeyControls = createStyledElement("div", { display: "flex", alignItems: "center" });
 	const apiKeyButton = createStyledElement(
 		"button",
@@ -545,17 +539,16 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 	apiKeyButton.addEventListener("click", () => {
 		const newKey = prompt("Please enter your Torn API key:", isApiKeySet() ? currentApiKey : "");
 		if (newKey !== null) {
-			// User didn't cancel prompt
 			currentApiKey = newKey.trim() || API_KEY_PLACEHOLDER;
 			if (currentApiKey === API_KEY_PLACEHOLDER) localStorage.removeItem("stakeoutUserApiKey");
 			else localStorage.setItem("stakeoutUserApiKey", currentApiKey);
+			previouslyOkayFactionUserIDs.clear();
 			updateButtonText();
-			fetchMonitorAndUpdate(factionID, stakeoutCheckbox); // Refresh display with new key
+			fetchMonitorAndUpdate(factionID, stakeoutCheckbox);
 		}
 	});
 	apiKeyControls.appendChild(apiKeyButton);
 
-	// Display Toggle Controls
 	const displayToggleControls = createStyledElement("div", { display: "flex", alignItems: "center" });
 	const isInitiallyCollapsed = localStorage.getItem(MAIN_DISPLAY_COLLAPSED_KEY) === "true";
 	const toggleDisplayButton = createStyledElement(
@@ -580,8 +573,8 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		if (monitorIntervalId) clearInterval(monitorIntervalId);
 		clearAllIndividualMonitors();
 		clearAllCountdownIntervals();
-		fetchMonitorAndUpdate(factionID, stakeoutCheckbox); // Initial fetch
-		monitorIntervalId = setInterval(() => fetchMonitorAndUpdate(factionID, stakeoutCheckbox), intervalSeconds * 1000); // Subsequent fetches
+		fetchMonitorAndUpdate(factionID, stakeoutCheckbox);
+		monitorIntervalId = setInterval(() => fetchMonitorAndUpdate(factionID, stakeoutCheckbox), intervalSeconds * 1000);
 	};
 
 	const stopMonitoring = () => {
@@ -589,33 +582,33 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		monitorIntervalId = null;
 		clearAllIndividualMonitors();
 		clearAllCountdownIntervals();
-		// Optionally remove the display
-		// document.getElementById(DISPLAY_CONTAINER_ID)?.remove();
-		// currentDisplayableMemberStatuses = []; // Clear data if removing display
+		previouslyOkayFactionUserIDs.clear();
 	};
 
 	stakeoutCheckbox.addEventListener("change", () => {
 		if (stakeoutCheckbox.checked) startMonitoring(parseInt(intervalDropdown.value));
-		else stopMonitoring(); // If unchecked it will stop monitoring
+		else stopMonitoring();
 	});
 
 	intervalDropdown.addEventListener("change", () => {
-		if (stakeoutCheckbox.checked) startMonitoring(parseInt(intervalDropdown.value)); // Restart with new interval if already monitoring
+		if (stakeoutCheckbox.checked) startMonitoring(parseInt(intervalDropdown.value));
 	});
 
 	factionPageElement.insertBefore(controlsContainer, factionPageElement.firstChild);
 }
 
 function initialFactionLoad(factionID) {
-	fetchMonitorAndUpdate(factionID, { checked: false }); // Initial load, monitoring not active
+	fetchMonitorAndUpdate(factionID, { checked: false });
 }
 
 function addStakeoutElementsToProfiles(statusElement) {
-	let intervalId = null; // intervalId for this specific profile stakeout
+	let intervalId = null;
+	let profileUserWasOkay = false;
+
 	const stakeoutContainer = createStyledElement("div", { float: "right", paddingRight: "10px", display: "flex", alignItems: "center" });
-	const stakeoutCheckbox = createStyledElement("input", { marginRight: "5px", cursor: "pointer" }, { type: "checkbox", id: "stakeoutCheckbox" }); // Profile page checkbox
+	const stakeoutCheckbox = createStyledElement("input", { marginRight: "5px", cursor: "pointer" }, { type: "checkbox", id: "stakeoutCheckbox" });
 	const intervalDropdown = createStyledElement("select", { marginRight: "5px" }, { id: "stakeoutInterval" });
-	[1, 2, 3, 4, 5, 30, 60].forEach((val) => intervalDropdown.add(createStyledElement("option", {}, { value: val, text: val.toString() }))); // Options for profile check interval
+	[1, 2, 3, 4, 5, 30, 60].forEach((val) => intervalDropdown.add(createStyledElement("option", {}, { value: val, text: val.toString() })));
 
 	stakeoutContainer.append(
 		stakeoutCheckbox,
@@ -625,27 +618,31 @@ function addStakeoutElementsToProfiles(statusElement) {
 	);
 
 	const startStakeout = async (intervalSeconds) => {
-		if (intervalId) clearInterval(intervalId); // Clear previous interval
+		if (intervalId) clearInterval(intervalId);
 		const userID = new URLSearchParams(window.location.search).get("XID");
 		if (!userID || !isApiKeySet()) {
 			if (!isApiKeySet()) alert("Please set your API key on a faction page first to use profile stakeout.");
-			stakeoutCheckbox.checked = false; // Uncheck if no userID or API key
+			stakeoutCheckbox.checked = false;
 			return;
 		}
 
-		if (await checkUserStatus(userID)) {
-			playAlertSound();
-			stakeoutCheckbox.checked = false; // Uncheck as user is already Okay
-			return; // Don't start interval if already okay
-		}
+		const isNowOkay = await checkUserStatus(userID);
+		if (isNowOkay) {
+			if (!profileUserWasOkay) playAlertSound();
+			profileUserWasOkay = true;
+			stakeoutCheckbox.checked = false;
+			return;
+		} else profileUserWasOkay = false;
 
 		intervalId = setInterval(async () => {
-			if (await checkUserStatus(userID)) {
+			const isCurrentlyOkay = await checkUserStatus(userID);
+			if (isCurrentlyOkay) {
+				if (!profileUserWasOkay) playAlertSound();
+				profileUserWasOkay = true;
 				clearInterval(intervalId);
 				intervalId = null;
-				stakeoutCheckbox.checked = false; // Uncheck once user is Okay
-				playAlertSound();
-			}
+				stakeoutCheckbox.checked = false;
+			} else profileUserWasOkay = false;
 		}, intervalSeconds * 1000);
 	};
 	const stopStakeout = () => {
@@ -654,46 +651,36 @@ function addStakeoutElementsToProfiles(statusElement) {
 	};
 
 	stakeoutCheckbox.addEventListener("change", () => {
-		if (stakeoutCheckbox.checked) startStakeout(parseInt(intervalDropdown.value));
-		else stopStakeout();
+		if (stakeoutCheckbox.checked) {
+			profileUserWasOkay = false;
+			startStakeout(parseInt(intervalDropdown.value));
+		} else stopStakeout();
 	});
 	intervalDropdown.addEventListener("change", () => {
-		if (stakeoutCheckbox.checked) startStakeout(parseInt(intervalDropdown.value)); // Restart with new interval if checked
+		if (stakeoutCheckbox.checked) startStakeout(parseInt(intervalDropdown.value));
 	});
 
 	statusElement.appendChild(stakeoutContainer);
 }
 
 function observe() {
-	if (window.StakeOutInterval) clearInterval(window.StakeOutInterval); // Clear any existing observer interval
+	if (window.StakeOutInterval) clearInterval(window.StakeOutInterval);
 
 	window.StakeOutInterval = setInterval(() => {
-		let foundProfileElements = false;
 		const profileStatusElement = document.querySelector(PROFILE_STATUS_SELECTOR);
-		if (profileStatusElement && !document.getElementById("stakeoutCheckbox")) {
-			// Check for profile page specific checkbox
-			addStakeoutElementsToProfiles(profileStatusElement);
-			foundProfileElements = true;
-		}
+		if (profileStatusElement && !document.getElementById("stakeoutCheckbox")) addStakeoutElementsToProfiles(profileStatusElement);
 
-		let foundFactionElements = false;
 		const factionProfileElement = document.querySelector(FACTION_STATUS_SELECTOR);
 		if (factionProfileElement) {
 			if (!document.getElementById(FACTION_CONTROLS_CONTAINER_ID)) {
-				// Check for faction controls container
 				const factionID = new URLSearchParams(window.location.search).get("ID");
 				if (factionID) {
 					addFactionStakeoutElements(factionProfileElement, factionID);
-					// Initial load of faction display should happen regardless of controls, if API key is set
-					if (!document.getElementById(DISPLAY_CONTAINER_ID)) {
-						initialFactionLoad(factionID);
-					}
+					if (!document.getElementById(DISPLAY_CONTAINER_ID)) initialFactionLoad(factionID);
 				}
 			}
-			foundFactionElements = true;
 		}
 
-		// Stop observing if elements for either page type are found and processed
 		if ((profileStatusElement && document.getElementById("stakeoutCheckbox")) || (factionProfileElement && document.getElementById(FACTION_CONTROLS_CONTAINER_ID)))
 			clearInterval(window.StakeOutInterval);
 	}, 500);
