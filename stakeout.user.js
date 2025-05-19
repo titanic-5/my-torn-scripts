@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    http://tampermonkey.net/
-// @version      2.1.1
+// @version      2.2.2
 // @description  Alerts when a Torn user leaves the hospital or monitors faction members with API key management and precise individual checks.
 // @author       Titanic_
 // @match        https://www.torn.com/profiles.php?XID=*
@@ -127,7 +127,7 @@ function addStakeoutElements(statusElement) {
 	const stakeoutContainer = createStyledElement("div", { float: "right", paddingRight: "10px", display: "flex", alignItems: "center" });
 	const stakeoutCheckbox = createStyledElement("input", { marginRight: "5px", cursor: "pointer" }, { type: "checkbox", id: "stakeoutCheckbox" });
 	const intervalDropdown = createStyledElement("select", { marginRight: "5px" }, { id: "stakeoutInterval" });
-	[1, 2, 3, 4, 5].forEach((interval) => intervalDropdown.appendChild(createStyledElement("option", {}, { value: interval, textContent: interval.toString() })));
+	[1, 2, 3, 4, 5, 30, 60].forEach((interval) => intervalDropdown.appendChild(createStyledElement("option", {}, { value: interval, textContent: interval.toString() })));
 	stakeoutContainer.appendChild(stakeoutCheckbox);
 	stakeoutContainer.appendChild(createStyledElement("label", { marginRight: "5px", cursor: "pointer" }, { htmlFor: "stakeoutCheckbox", textContent: "Check status every" }));
 	stakeoutContainer.appendChild(intervalDropdown);
@@ -433,7 +433,7 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		{ marginRight: "5px", backgroundColor: "#444", color: "white", border: "1px solid #666", padding: "3px" },
 		{ id: "factionStakeoutInterval" }
 	);
-	[1, 2, 3, 4, 5, 10, 15, 30, 60].forEach((interval) => {
+	[30, 60].forEach((interval) => {
 		const option = createStyledElement("option", { backgroundColor: "#222", color: "white" }, { value: interval, textContent: interval.toString() });
 		intervalDropdown.appendChild(option);
 	});
