@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    http://tampermonkey.net/
-// @version      2.5.0
+// @version      2.5.1
 // @description  Stakeout factions or individual users
 // @author       Titanic_
 // @match        https://www.torn.com/profiles.php?XID=*
@@ -445,8 +445,7 @@ function createMemberElement(member, categoryName) {
 	else if (member.lastActionStatus === "Idle") onlineStatusIcon.style.backgroundColor = "#FF9800";
 	else onlineStatusIcon.style.backgroundColor = "#9E9E9E";
 
-	const nameColor = member.status.includes("Jail") && !member.status.includes("Federal") ? "#333" : "#E0E0E0";
-	const nameSpan = createStyledElement("span", { fontWeight: "bold", color: nameColor }, { textContent: member.name });
+	const nameSpan = createStyledElement("span", { fontWeight: "bold", color: "#E0E0E0" }, { textContent: member.name });
 	const nameContainer = createStyledElement("div", { display: "flex", alignItems: "center", marginBottom: "1px" });
 	nameContainer.append(onlineStatusIcon, nameSpan);
 
