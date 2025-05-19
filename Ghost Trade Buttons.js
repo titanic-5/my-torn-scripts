@@ -1,127 +1,106 @@
 // ==UserScript==
 // @name         Ghost Trade Buttons
 // @namespace    Titanic_
-// @version      1.61
+// @version      2.0
 // @description  Adds buttons to remove at million $ intervals to the trade page to make it easier to manage money in ghost trades.
 // @license      MIT
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/trade.php*
-// @grant        window.onurlchange
+// @grant        none
 // @downloadURL https://update.greasyfork.org/scripts/493082/Ghost%20Trade%20Buttons.user.js
 // @updateURL https://update.greasyfork.org/scripts/493082/Ghost%20Trade%20Buttons.meta.js
 // ==/UserScript==
 
-let ran = false;
+(function () {
+    'use strict';
 
-function addElements() {
-    ran = false;
+    // Feel free to add to or change these
+    const BUTTONS = [
+        { label: "-1m", amount: 1000000 },
+        { label: "-5m", amount: 5000000 },
+        { label: "-10m", amount: 10000000 },
+        { label: "-100m", amount: 100000000 },
+    ];
 
-    let div;
-    let parent = document.createElement("div");
+    function addElements() {
+        const div = document.querySelector("div.input-money-group");
+        if (!div) return;
 
-    addButton(parent, "-1m", 1000000);
-    addButton(parent, "-2.5m", 2500000);
-    addButton(parent, "-5m", 5000000);
-    addButton(parent, "-10m", 10000000);
-    addCustomButton(parent);
-    addPasteButton(parent);
+        const spacerRef = document.querySelector("span.btn-wrap.silver");
+        if (!spacerRef) return;
 
-    div = document.querySelector("div.input-money-group.success");
+        clearInterval(window.GhostTradeInterval);
+        const spacer = spacerRef.previousElementSibling?.cloneNode();
+        const parent = document.createElement("div");
 
-    div.parentNode.insertBefore(parent, div.nextSibling);
-}
+        if (spacer) parent.prepend(spacer);
+        BUTTONS.forEach(btn => addButton(parent, btn.label, btn.amount));
+        addCustomButton(parent);
+        addPasteButton(parent);
 
-function addButton(parent, label, amount) {
-    let btn = document.createElement("input");
-    btn.value = label;
-    btn.type = "button";
-    btn.classList.add("torn-btn");
-
-    btn.addEventListener("click", () => {
-        let $inputVisible = document.querySelector(".user-id.input-money");
-        let $inputHidden = document.querySelectorAll(".user-id.input-money")[1];
-        let value = parseInt($inputHidden.value);
-
-        if (value - amount > 0) {
-            value -= amount;
-            $inputVisible.value = value;
-            $inputVisible.dispatchEvent(new Event("input", { bubbles: true }));
-        } else {
-            $inputVisible.value = 0;
-            $inputVisible.dispatchEvent(new Event("input", { bubbles: true }));
-        }
-    });
-
-    if (ran == false) {
-        parent.prepend(document.querySelector("span.btn-wrap.silver").previousElementSibling.cloneNode());
-        ran = true;
+        div.parentNode.insertBefore(parent, div.nextSibling);
     }
 
-    parent.appendChild(btn);
-}
+    function addButton(parent, label, amount) {
+        let btn = createButton(label, () => adjustMoney(-amount));
+        parent.appendChild(btn);
+    }
 
-function addPasteButton(parent) {
-    let btn = document.createElement("input");
-    btn.value = "Paste";
-    btn.type = "button";
-    btn.classList.add("torn-btn");
-
-    btn.addEventListener("click", () => {
-        let $inputVisible = document.querySelector(".user-id.input-money");
-        let $inputHidden = document.querySelectorAll(".user-id.input-money")[1];
-        navigator.clipboard.readText().then((clipboardValue) => {
-            if (parseInt(clipboardValue)) {
-                $inputVisible.value = parseInt(clipboardValue);
-                $inputVisible.dispatchEvent(new Event("input", { bubbles: true }));
-            } else {
-                alert("Not a number");
+    function addPasteButton(parent) {
+        let btn = createButton("Paste", async () => {
+            try {
+                let text = await navigator.clipboard.readText();
+                let value = parseInt(text.replace(/[, $]/g, ""));
+                if (isNaN(value)) alert("Clipboard does not contain a valid number.");
+                else adjustMoney(value, true);
+            } catch (err) {
+                alert("Clipboard access denied. Please paste manually.");
             }
         });
-    });
+        parent.appendChild(btn);
+    }
 
-    parent.appendChild(btn);
-}
-
-function addCustomButton(parent) {
-    let btn = document.createElement("input");
-    btn.value = "Custom";
-    btn.type = "button";
-    btn.classList.add("torn-btn");
-
-    btn.addEventListener("click", () => {
-        let $inputVisible = document.querySelector(".user-id.input-money");
-        let $inputHidden = document.querySelectorAll(".user-id.input-money")[1];
-        navigator.clipboard.readText().then((clipboardValue) => {
-            if (parseInt(clipboardValue)) {
-                $inputVisible.value = parseInt($inputHidden.value) - parseInt(clipboardValue);
-                $inputVisible.dispatchEvent(new Event("input", { bubbles: true }));
-            } else {
-                var value = prompt("How much to subtract");
-                if (parseInt(value)) {
-                    $inputVisible.value = parseInt($inputHidden.value) - parseInt(value);
-                    $inputVisible.dispatchEvent(new Event("input", { bubbles: true }));
-                }
-            }
+    function addCustomButton(parent) {
+        let btn = createButton("Custom", async () => {
+            let input = prompt("Enter amount to subtract:");
+            let value = parseInt(input.replace(/[, $]/g, ''));
+            if (!isNaN(value)) adjustMoney(-value);
+            else alert("Invalid number entered.");
         });
-    });
+        parent.appendChild(btn);
+    }
 
-    parent.appendChild(btn);
-}
+    function createButton(label, onClick) {
+        let btn = document.createElement("input");
+        btn.value = label;
+        btn.type = "button";
+        btn.classList.add("torn-btn");
+        btn.addEventListener("click", onClick);
+        return btn;
+    }
 
-if (window.onurlchange === null) {
-    window.addEventListener('urlchange', () => {
-        inputCheck();
-    });
-}
+    function adjustMoney(amount, set = false) {
+        let [inputVisible, inputHidden] = document.querySelectorAll(".user-id.input-money");
+        if (!inputVisible || !inputHidden) return;
 
-if (window.location.href.includes("trade.php#step=addmoney")) {
-    inputCheck();
-}
+        let newValue = set ? amount : (parseInt(inputHidden.value) || 0) + amount;
+        if (newValue < 0) newValue = 0;
 
-function inputCheck() {
-    setTimeout(function() {
-        if ($('.user-id.input-money').length > 0) {
-            addElements();
-        }
-    }, 300);
-}
+        inputVisible.value = newValue;
+        inputVisible.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    function observe() {
+        if (!window.location.href.includes("trade.php#step=addmoney")) return;
+        clearInterval(window.GhostTradeInterval);
+        window.GhostTradeInterval = setInterval(() => {
+            if (document.querySelector('.user-id.input-money') &&
+                document.querySelectorAll("ul.inputs > li > div").length < 3) {
+                addElements();
+            }
+        }, 100);
+    }
+
+    window.addEventListener("hashchange", observe);
+    observe();
+})();
