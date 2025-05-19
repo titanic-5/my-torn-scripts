@@ -1,11 +1,13 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    http://tampermonkey.net/
-// @version      2.2.2
+// @version      2.2.3
 // @description  Alerts when a Torn user leaves the hospital or monitors faction members with API key management and precise individual checks.
 // @author       Titanic_
 // @match        https://www.torn.com/profiles.php?XID=*
 // @match        https://www.torn.com/factions.php?step=profile&ID=*
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/stakeout.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/stakeout.user.js
 // @grant        none
 // ==/UserScript==
 
