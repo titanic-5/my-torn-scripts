@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    http://tampermonkey.net/
-// @version      2.5.1
+// @version      2.5.2
 // @description  Stakeout factions or individual users
 // @author       Titanic_
 // @match        https://www.torn.com/profiles.php?XID=*
@@ -34,7 +34,7 @@ const STATUS_CATEGORIES = {
 	HOSPITAL_TORN: "In Hospital (Torn)",
 	HOSPITAL_ABROAD: "In Hospital (Abroad)",
 	TRAVELING: "Traveling",
-	ABROAD_NOT_HOSPITALIZED: "Abroad (Not Hospitalized)",
+	OKAY_ABROAD: "Abroad (Not Hospitalized)",
 	JAIL: "In Jail",
 	OTHER: "Other",
 };
@@ -44,29 +44,36 @@ const CATEGORY_ORDER = [
 	STATUS_CATEGORIES.HOSPITAL_TORN,
 	STATUS_CATEGORIES.HOSPITAL_ABROAD,
 	STATUS_CATEGORIES.TRAVELING,
-	STATUS_CATEGORIES.ABROAD_NOT_HOSPITALIZED,
+	STATUS_CATEGORIES.OKAY_ABROAD,
 	STATUS_CATEGORIES.JAIL,
 	STATUS_CATEGORIES.OTHER,
 ];
 
 const YATA_API_KEY_STORAGE_KEY = "stakeoutYataApiKey";
-const TORNSTATS_API_KEY_STORAGE_KEY = "stakeoutTornStatsApiKey";
+const TORNSTATS_API_KEY_STORAGE_KEY = "stakeoutTornStatsApiKey"; // not used
+const FFSCOUTER_API_KEY_STORAGE_KEY = "stakeoutFFScouterApiKey";
+
 const SPIES_MODAL_ID = "stakeout-spies-modal";
 const SPIES_MODAL_OVERLAY_ID = "stakeout-spies-modal-overlay";
 const YATA_API_KEY_INPUT_ID = "stakeout-yata-api-key-input";
-const TORNSTATS_API_KEY_INPUT_ID = "stakeout-tornstats-api-key-input";
+const TORNSTATS_API_KEY_INPUT_ID = "stakeout-tornstats-api-key-input"; // not used
+const FFSCOUTER_API_KEY_INPUT_ID = "stakeout-ffscouter-api-key-input";
 const SPY_TOOLTIP_ID = "stakeout-spy-tooltip";
 
 const DB_NAME = "StakeoutDB";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const YATA_SPIES_STORE_NAME = "yataFactionSpies";
+const FFSCOUTER_SPIES_STORE_NAME = "ffscouterFactionSpies";
+
 const CACHE_DURATION_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+const MAX_FFSCOUTER_TARGETS_PER_REQUEST = 205;
 
 let individualMonitorTimeouts = new Map();
 let activeCountdownIntervals = new Map();
 let currentDisplayableMemberStatuses = [];
 let previouslyOkayFactionUserIDs = new Set();
 let currentYataSpies = {};
+let currentFFScouterSpies = {};
 let spiesModalEscapeKeyListener = null;
 let dbPromise = null;
 
@@ -153,36 +160,39 @@ function openDB() {
 			if (!db.objectStoreNames.contains(YATA_SPIES_STORE_NAME)) {
 				db.createObjectStore(YATA_SPIES_STORE_NAME, { keyPath: "factionID" });
 			}
+			if (!db.objectStoreNames.contains(FFSCOUTER_SPIES_STORE_NAME)) {
+				db.createObjectStore(FFSCOUTER_SPIES_STORE_NAME, { keyPath: "factionID" });
+			}
 		};
 	});
 	return dbPromise;
 }
 
-async function getSpyDataFromDB(factionID) {
+async function getSpyDataFromDB(factionID, storeName) {
 	try {
 		const db = await openDB();
 		return new Promise((resolve, reject) => {
-			const transaction = db.transaction([YATA_SPIES_STORE_NAME], "readonly");
-			const store = transaction.objectStore(YATA_SPIES_STORE_NAME);
+			const transaction = db.transaction([storeName], "readonly");
+			const store = transaction.objectStore(storeName);
 			const request = store.get(factionID);
 			request.onsuccess = (event) => resolve(event.target.result);
 			request.onerror = (event) => {
-				console.error("Error getting spy data from DB:", event.target.errorCode);
+				console.error(`Error getting spy data from DB (Store: ${storeName}):`, event.target.errorCode);
 				reject(event.target.errorCode);
 			};
 		});
 	} catch (error) {
-		console.error("Failed to open DB for getSpyData:", error);
+		console.error(`Failed to open DB for getSpyData (Store: ${storeName}):`, error);
 		return null;
 	}
 }
 
-async function saveSpyDataToDB(factionID, spyData) {
+async function saveSpyDataToDB(factionID, spyData, storeName) {
 	try {
 		const db = await openDB();
 		return new Promise((resolve, reject) => {
-			const transaction = db.transaction([YATA_SPIES_STORE_NAME], "readwrite");
-			const store = transaction.objectStore(YATA_SPIES_STORE_NAME);
+			const transaction = db.transaction([storeName], "readwrite");
+			const store = transaction.objectStore(storeName);
 			const item = {
 				factionID: factionID,
 				data: spyData,
@@ -191,12 +201,12 @@ async function saveSpyDataToDB(factionID, spyData) {
 			const request = store.put(item);
 			request.onsuccess = () => resolve();
 			request.onerror = (event) => {
-				console.error("Error saving spy data to DB:", event.target.errorCode);
+				console.error(`Error saving spy data to DB (Store: ${storeName}):`, event.target.errorCode);
 				reject(event.target.errorCode);
 			};
 		});
 	} catch (error) {
-		console.error("Failed to open DB for saveSpyData:", error);
+		console.error(`Failed to open DB for saveSpyData (Store: ${storeName}):`, error);
 	}
 }
 
@@ -206,35 +216,39 @@ function isCacheValid(cachedItem) {
 }
 
 async function clearOldSpyDataFromDB() {
-	try {
-		const db = await openDB();
-		const transaction = db.transaction([YATA_SPIES_STORE_NAME], "readwrite");
-		const store = transaction.objectStore(YATA_SPIES_STORE_NAME);
-		const request = store.openCursor();
+	const storesToClean = [YATA_SPIES_STORE_NAME, FFSCOUTER_SPIES_STORE_NAME];
+	for (const storeName of storesToClean) {
+		try {
+			const db = await openDB();
+			const transaction = db.transaction([storeName], "readwrite");
+			const store = transaction.objectStore(storeName);
+			const request = store.openCursor();
 
-		request.onsuccess = (event) => {
-			const cursor = event.target.result;
-			if (cursor) {
-				if (!isCacheValid(cursor.value)) store.delete(cursor.primaryKey);
-				cursor.continue();
-			}
-		};
-		request.onerror = (event) => console.error("Error clearing old spy data from DB:", event.target.errorCode);
-	} catch (error) {
-		console.error("Failed to open DB for clearOldSpyDataFromDB:", error);
+			request.onsuccess = (event) => {
+				const cursor = event.target.result;
+				if (cursor) {
+					if (!isCacheValid(cursor.value)) store.delete(cursor.primaryKey);
+					cursor.continue();
+				}
+			};
+			request.onerror = (event) => console.error(`Error clearing old spy data from DB (Store: ${storeName}):`, event.target.errorCode);
+		} catch (error) {
+			console.error(`Failed to open DB for clearOldSpyDataFromDB (Store: ${storeName}):`, error);
+		}
 	}
 }
 
 async function fetchApi(endpoint, selections = "basic", apiKey = currentApiKey) {
 	return new Promise((resolve, reject) => {
 		const isTornApi = endpoint.startsWith("user/") || endpoint.startsWith("faction/");
+		const isFFScouterApi = endpoint.startsWith("https://ffscouter.com/api/v1/get-stats");
+
 		if (isTornApi && (!apiKey || apiKey === API_KEY_PLACEHOLDER)) {
 			console.warn("Stakeout Script: Torn API Key not set for endpoint:", endpoint);
 			resolve({ error: { error: "API Key not set" } });
 			return;
 		}
-		if (!isTornApi && !apiKey) {
-			// console.warn("Stakeout Script: API Key not set for external endpoint:", endpoint);
+		if (!isTornApi && !isFFScouterApi && !apiKey) {
 			resolve({ error: { error: "API Key not set for external service" } });
 			return;
 		}
@@ -242,14 +256,11 @@ async function fetchApi(endpoint, selections = "basic", apiKey = currentApiKey) 
 		const baseUrl = isTornApi ? "https://api.torn.com/" : "";
 		let finalUrl;
 
-		if (isTornApi) {
-			finalUrl = `${baseUrl}${endpoint}?key=${apiKey}&selections=${selections}`;
-		} else {
-			if (endpoint.includes("?")) {
-				finalUrl = `${endpoint}&key=${apiKey}`;
-			} else {
-				finalUrl = `${endpoint}?key=${apiKey}`;
-			}
+		if (isTornApi) finalUrl = `${baseUrl}${endpoint}?key=${apiKey}&selections=${selections}`;
+		else if (isFFScouterApi) finalUrl = endpoint;
+		else {
+			if (endpoint.includes("?")) finalUrl = `${endpoint}&key=${apiKey}`;
+			else finalUrl = `${endpoint}?key=${apiKey}`;
 		}
 
 		GM_xmlhttpRequest({
@@ -260,7 +271,9 @@ async function fetchApi(endpoint, selections = "basic", apiKey = currentApiKey) 
 				if (response.status >= 200 && response.status < 300) {
 					try {
 						const data = JSON.parse(response.responseText);
-						if (data?.error) {
+						// YATA error structure: { error: { code: X, error: "message" } }
+						// FFScouter error structure: Don't come with 2xx, error comes with 4xx.
+						if (data?.error && data.error.error) {
 							const errorMsg = data.error.error || JSON.stringify(data.error);
 							console.error(`API Error (${finalUrl.split("?")[0]} - Status ${response.status}):`, errorMsg);
 						}
@@ -272,8 +285,12 @@ async function fetchApi(endpoint, selections = "basic", apiKey = currentApiKey) 
 				} else {
 					console.error(`API Request Failed for ${finalUrl.split("?")[0]}: Status ${response.status}`, "Response:", response.responseText);
 					try {
-						const data = JSON.parse(response.responseText); // Attempt to parse error from body
-						resolve(data.error ? data : { error: { error: `HTTP Error ${response.status}`, response: response.responseText } });
+						const data = JSON.parse(response.responseText);
+						// FFScouter errors: { code: X, error: "message" }
+						// YATA errors: { error: { code: X, error: "message" } }
+						if (data?.error?.error) resolve({ error: data.error });
+						else if (data?.code && data?.error) resolve(data);
+						else resolve({ error: { error: `HTTP Error ${response.status}`, response: response.responseText } });
 					} catch (e) {
 						resolve({ error: { error: `HTTP Error ${response.status}`, response: response.responseText } });
 					}
@@ -336,24 +353,27 @@ async function fetchYataSpies(factionID) {
 	const yataApiKey = localStorage.getItem(YATA_API_KEY_STORAGE_KEY);
 	if (!yataApiKey) return null;
 
-	const cachedData = await getSpyDataFromDB(factionID);
-	if (cachedData && isCacheValid(cachedData)) return cachedData.data;
+	const cachedData = await getSpyDataFromDB(factionID, YATA_SPIES_STORE_NAME);
+	if (cachedData && isCacheValid(cachedData) && cachedData.data && cachedData.data.spies && Object.keys(cachedData.data.spies).length > 0) {
+		return cachedData.data;
+	}
 
 	const endpoint = `https://yata.yt/api/v1/spies/?faction=${factionID}`;
 	const freshData = await fetchApi(endpoint, "", yataApiKey);
 
 	if (freshData && !freshData.error) {
-		await saveSpyDataToDB(factionID, freshData);
+		await saveSpyDataToDB(factionID, freshData, YATA_SPIES_STORE_NAME);
 		return freshData;
 	}
 	if (freshData?.error) {
-		const errorMessage = freshData.error.error || "Unknown YATA API error";
-		const errorCode = freshData.error.code;
+		const yataError = freshData.error;
+		const errorMessage = yataError.error || JSON.stringify(yataError);
+		const errorCode = yataError.code;
 
 		if (errorCode === 2 && (errorMessage.includes("No spies for faction") || errorMessage.includes("No spies") || errorMessage.includes("faction not found")))
 			console.log("YATA: No spies for faction ID:", factionID, "or faction not found.");
 		else {
-			console.error("YATA Spies API Error:", errorMessage, errorCode ? `(Code: ${errorCode})` : `(Details: ${freshData.error.details || "N/A"})`);
+			console.error("YATA Spies API Error:", errorMessage, errorCode ? `(Code: ${errorCode})` : "");
 			const controlsContainer = document.getElementById(FACTION_CONTROLS_CONTAINER_ID);
 			if (controlsContainer && !document.getElementById("yata-api-error-message")) {
 				const errorMsgElement = createStyledElement(
@@ -364,6 +384,57 @@ async function fetchYataSpies(factionID) {
 				controlsContainer.appendChild(errorMsgElement);
 			}
 		}
+	}
+	return null;
+}
+
+async function fetchFFScouterSpies(factionID, memberIDs) {
+	const ffscouterApiKey = localStorage.getItem(FFSCOUTER_API_KEY_STORAGE_KEY);
+	if (!ffscouterApiKey || memberIDs.length === 0) return null;
+
+	const cachedData = await getSpyDataFromDB(factionID, FFSCOUTER_SPIES_STORE_NAME);
+	if (cachedData && isCacheValid(cachedData) && cachedData.data && Object.keys(cachedData.data).length > 0) {
+		return cachedData.data;
+	}
+
+	let allFFScouterData = {};
+	const memberIDChunks = [];
+	for (let i = 0; i < memberIDs.length; i += MAX_FFSCOUTER_TARGETS_PER_REQUEST) {
+		memberIDChunks.push(memberIDs.slice(i, i + MAX_FFSCOUTER_TARGETS_PER_REQUEST));
+	}
+
+	for (const chunk of memberIDChunks) {
+		const targetsParam = chunk.join(",");
+		const endpoint = `https://ffscouter.com/api/v1/get-stats?key=${ffscouterApiKey}&targets=${targetsParam}`;
+		const responseData = await fetchApi(endpoint);
+
+		if (responseData && Array.isArray(responseData))
+			responseData.forEach((spy) => {
+				allFFScouterData[spy.player_id.toString()] = spy;
+			});
+		else if (responseData && responseData.code && responseData.error) {
+			console.error(`FFScouter API Error (Code ${responseData.code}): ${responseData.error}`);
+			if (responseData.code === 6) {
+				const controlsContainer = document.getElementById(FACTION_CONTROLS_CONTAINER_ID);
+				if (controlsContainer && !document.getElementById("ffscouter-api-error-message")) {
+					const errorMsgElement = createStyledElement(
+						"p",
+						{ color: "yellow", fontSize: "0.8em", marginLeft: "10px" },
+						{ id: "ffscouter-api-error-message", textContent: `FFScouter API: ${responseData.error.substring(0, 50)}... (see console)` }
+					);
+					controlsContainer.appendChild(errorMsgElement);
+				}
+			}
+			if (responseData.code === 1 || responseData.code === 2 || responseData.code === 6) return null;
+		} else if (responseData?.error) {
+			console.error("FFScouter Fetch Error:", responseData.error.error || responseData.error);
+			return null;
+		}
+	}
+
+	if (Object.keys(allFFScouterData).length > 0) {
+		await saveSpyDataToDB(factionID, allFFScouterData, FFSCOUTER_SPIES_STORE_NAME);
+		return allFFScouterData;
 	}
 	return null;
 }
@@ -478,14 +549,25 @@ function createMemberElement(member, categoryName) {
 
 	const actionsContainer = createStyledElement("div", { display: "flex", gap: "5px", flexShrink: 0, alignItems: "center" });
 
+	let spyDataSource = null;
+	let actualSpyData = null;
+
 	if (member.yataSpyData && (member.yataSpyData.total > 0 || Object.values(member.yataSpyData).some((v) => typeof v === "number" && v > 0 && v !== -1))) {
+		spyDataSource = "yata";
+		actualSpyData = member.yataSpyData;
+	} else if (member.ffscouterSpyData && (member.ffscouterSpyData.bs_estimate !== null || member.ffscouterSpyData.fair_fight !== null)) {
+		spyDataSource = "ffscouter";
+		actualSpyData = member.ffscouterSpyData;
+	}
+
+	if (spyDataSource && actualSpyData) {
 		const spyButton = createStyledElement(
 			"button",
 			{
 				padding: "3px 5px",
 				fontSize: "1em",
 				color: "#f0f0f0",
-				backgroundColor: "#555",
+				backgroundColor: spyDataSource === "yata" ? "#3498DB" : "#555",
 				textDecoration: "none",
 				borderRadius: "3px",
 				border: "1px solid #5a6268",
@@ -496,7 +578,6 @@ function createMemberElement(member, categoryName) {
 			},
 			{ innerHTML: "🕵️‍♂️" }
 		);
-
 		spyButton.onmouseover = (event) => {
 			let tooltip = document.getElementById(SPY_TOOLTIP_ID);
 			if (!tooltip) {
@@ -521,30 +602,51 @@ function createMemberElement(member, categoryName) {
 				document.body.appendChild(tooltip);
 			}
 
-			const spy = member.yataSpyData;
-			let tooltipHTML = `
-                <div style="font-family: Verdana, Arial, sans-serif;">
-                    <div style="font-size: 1.15em; font-weight: bold; color: #76D7C4; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #4a4a4a; text-align: center;">
-                        YATA Spy Report
-                    </div>
-                    <div style="display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 5px 12px; margin-bottom: 10px; font-size: 0.95em;">
-                        <span style="font-weight: bold; color: #ccc;">Str:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(spy.strength)}</span>
-                        <span style="font-weight: bold; color: #ccc;">Def:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(spy.defense)}</span>
-                        <span style="font-weight: bold; color: #ccc;">Spd:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(spy.speed)}</span>
-                        <span style="font-weight: bold; color: #ccc;">Dex:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(spy.dexterity)}</span>
-                    </div>
-                    <div style="font-size: 1em; margin-bottom: 8px; padding-top: 8px; border-top: 1px solid #4a4a4a; display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-weight: bold; color: #ddd;">Total:</span>
-                        <span style="font-weight: bold; color: #58D68D; font-size: 1.1em;">${formatStatValue(spy.total)}</span>
-                    </div>
-                    <div style="font-size: 0.85em; color: #999; text-align: right; margin-top: 5px;">
-                        ${formatSpyTimestamp(
-													spy.update ||
-														Math.max(spy.strength_timestamp || 0, spy.speed_timestamp || 0, spy.defense_timestamp || 0, spy.dexterity_timestamp || 0, spy.total_timestamp || 0)
-												)}
-                    </div>
-                </div>
-            `;
+			let tooltipHTML = "";
+			if (spyDataSource === "yata") {
+				const spy = actualSpyData;
+				tooltipHTML = `
+                    <div style="font-family: Verdana, Arial, sans-serif;">
+                        <div style="font-size: 1.15em; font-weight: bold; color: #76D7C4; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #4a4a4a; text-align: center;">
+                            YATA Spy Report
+                        </div>
+                        <div style="display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 5px 12px; margin-bottom: 10px; font-size: 0.95em;">
+                            <span style="font-weight: bold; color: #ccc;">Str:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(spy.strength)}</span>
+                            <span style="font-weight: bold; color: #ccc;">Def:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(spy.defense)}</span>
+                            <span style="font-weight: bold; color: #ccc;">Spd:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(spy.speed)}</span>
+                            <span style="font-weight: bold; color: #ccc;">Dex:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(spy.dexterity)}</span>
+                        </div>
+                        <div style="font-size: 1em; margin-bottom: 8px; padding-top: 8px; border-top: 1px solid #4a4a4a; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: bold; color: #ddd;">Total:</span>
+                            <span style="font-weight: bold; color: #58D68D; font-size: 1.1em;">${formatStatValue(spy.total)}</span>
+                        </div>
+                        <div style="font-size: 0.85em; color: #999; text-align: right; margin-top: 5px;">
+                            ${formatSpyTimestamp(
+															spy.update ||
+																Math.max(spy.strength_timestamp || 0, spy.speed_timestamp || 0, spy.defense_timestamp || 0, spy.dexterity_timestamp || 0, spy.total_timestamp || 0)
+														)}
+                        </div>
+                    </div>`;
+			} else if (spyDataSource === "ffscouter") {
+				const spy = actualSpyData;
+				tooltipHTML = `
+                    <div style="font-family: Verdana, Arial, sans-serif;">
+                        <div style="font-size: 1.15em; font-weight: bold; color: #5DADE2; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #4a4a4a; text-align: center;">
+                            FFScouter Report
+                        </div>
+                        <div style="display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin-bottom: 10px; font-size: 0.95em;">
+                            <span style="font-weight: bold; color: #ccc;">Fair Fight:</span> <span style="color: #f0f0f0; text-align: right;">${
+															spy.fair_fight !== null ? spy.fair_fight.toFixed(2) : "N/A"
+														}</span>
+                            <span style="font-weight: bold; color: #ccc;">BS Estimate:</span> <span style="color: #f0f0f0; text-align: right;">${
+															spy.bs_estimate_human || (spy.bs_estimate ? formatStatValue(spy.bs_estimate) : "N/A")
+														}</span>
+                        </div>
+                        <div style="font-size: 0.85em; color: #999; text-align: right; margin-top: 10px; padding-top: 5px; border-top: 1px solid #4a4a4a;">
+                            ${formatSpyTimestamp(spy.last_updated)}
+                        </div>
+                    </div>`;
+			}
 			tooltip.innerHTML = tooltipHTML;
 
 			const rect = spyButton.getBoundingClientRect();
@@ -552,12 +654,10 @@ function createMemberElement(member, categoryName) {
 			let leftPosition = rect.left + window.scrollX;
 
 			tooltip.style.display = "block";
-
 			if (leftPosition + tooltip.offsetWidth > window.innerWidth - 10) leftPosition = rect.right + window.scrollX - tooltip.offsetWidth;
 			if (leftPosition < 10) leftPosition = 10;
 			if (topPosition + tooltip.offsetHeight > window.innerHeight - 10) topPosition = rect.top + window.scrollY - tooltip.offsetHeight - 7;
 			if (topPosition < 10) topPosition = 10;
-
 			tooltip.style.left = `${leftPosition}px`;
 			tooltip.style.top = `${topPosition}px`;
 		};
@@ -638,7 +738,7 @@ function createCategoryElement(categoryName, membersInCategory, factionID) {
 		display: "flex",
 		justifyContent: "space-between",
 		alignItems: "center",
-        fontSize: "1.25em",
+		fontSize: "1.25em",
 	});
 	const updateHeaderContent = (isCollapsed) => (categoryHeader.innerHTML = `${categoryName} <span>(${membersInCategory.length}) ${isCollapsed ? "▼" : "▲"}</span>`);
 	updateHeaderContent(isCollapsedStored);
@@ -695,7 +795,8 @@ function updateFactionDisplay(memberStatusesToDisplay, factionID) {
 	}
 
 	if (!isApiKeySet()) {
-		contentWrapper.innerHTML = '<p style="color: #ffcc00; text-align: center; padding: 20px;">Please set your API Key using the button above to view faction member statuses.</p>';
+		contentWrapper.innerHTML =
+			'<p style="color: #ffcc00; text-align: center; padding: 20px;">Please set your Torn API Key using the button above to view faction member statuses.</p>';
 		return;
 	}
 
@@ -729,7 +830,7 @@ function updateFactionDisplay(memberStatusesToDisplay, factionID) {
 				categorizedMembers[STATUS_CATEGORIES.HOSPITAL_ABROAD].push(member);
 			else categorizedMembers[STATUS_CATEGORIES.HOSPITAL_TORN].push(member);
 		} else if (status === "Traveling") categorizedMembers[STATUS_CATEGORIES.TRAVELING].push(member);
-		else if (status === "Abroad") categorizedMembers[STATUS_CATEGORIES.ABROAD_NOT_HOSPITALIZED].push(member);
+		else if (status === "Abroad") categorizedMembers[STATUS_CATEGORIES.OKAY_ABROAD].push(member);
 		else if (status.includes("Jail")) categorizedMembers[STATUS_CATEGORIES.JAIL].push(member);
 		else if (status === "Okay") categorizedMembers[STATUS_CATEGORIES.OKAY].push(member);
 		else categorizedMembers[STATUS_CATEGORIES.OTHER].push(member);
@@ -760,6 +861,7 @@ async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox) {
 	const usersOkayInPreviousCycle = new Set(previouslyOkayFactionUserIDs);
 	previouslyOkayFactionUserIDs.clear();
 	document.getElementById("yata-api-error-message")?.remove();
+	document.getElementById("ffscouter-api-error-message")?.remove();
 
 	const tornFactionData = await fetchApi(`faction/${factionID}`);
 	if (tornFactionData?.error || !tornFactionData?.members) {
@@ -772,9 +874,13 @@ async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox) {
 		}
 		return;
 	}
+	const memberIDs = Object.keys(tornFactionData.members);
 
 	const yataFullResponse = await fetchYataSpies(factionID);
-	currentYataSpies = yataFullResponse ? yataFullResponse.spies : {};
+	currentYataSpies = yataFullResponse?.spies || {};
+
+	const ffScouterFullResponse = await fetchFFScouterSpies(factionID, memberIDs);
+	currentFFScouterSpies = ffScouterFullResponse || {};
 
 	currentDisplayableMemberStatuses = Object.entries(tornFactionData.members).map(([userID, memberData]) => ({
 		userID,
@@ -784,6 +890,7 @@ async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox) {
 		durationSeconds: parseTimeToSeconds(memberData.status.description),
 		lastActionStatus: memberData.last_action?.status || "Offline",
 		yataSpyData: currentYataSpies[userID] || null,
+		ffscouterSpyData: currentFFScouterSpies[userID] || null,
 	}));
 
 	let newlyOkayPlayerDetected = false;
@@ -809,39 +916,55 @@ function closeSpiesModal() {
 	}
 }
 
-function saveSpyApiKeys() {
-	const yataKeyInput = document.getElementById(YATA_API_KEY_INPUT_ID);
-	const tsKeyInput = document.getElementById(TORNSTATS_API_KEY_INPUT_ID);
+async function saveSpyApiKeys() {
+	const currentFactionID = new URLSearchParams(window.location.search).get("ID");
 
-	if (yataKeyInput.value.trim()) localStorage.setItem(YATA_API_KEY_STORAGE_KEY, yataKeyInput.value.trim());
+	const yataKeyInput = document.getElementById(YATA_API_KEY_INPUT_ID);
+	const tsKeyInput = document.getElementById(TORNSTATS_API_KEY_INPUT_ID); // not used
+	const ffscouterKeyInput = document.getElementById(FFSCOUTER_API_KEY_INPUT_ID);
+
+	const oldYataKey = localStorage.getItem(YATA_API_KEY_STORAGE_KEY);
+	const newYataKey = yataKeyInput.value.trim();
+	if (newYataKey) localStorage.setItem(YATA_API_KEY_STORAGE_KEY, newYataKey);
 	else localStorage.removeItem(YATA_API_KEY_STORAGE_KEY);
+	if (newYataKey !== oldYataKey && currentFactionID) {
+		await clearSpyDataForFactionFromDB(currentFactionID, YATA_SPIES_STORE_NAME);
+		document.getElementById("yata-api-error-message")?.remove();
+	}
+
+	const oldFFScouterKey = localStorage.getItem(FFSCOUTER_API_KEY_STORAGE_KEY);
+	const newFFScouterKey = ffscouterKeyInput.value.trim();
+	if (newFFScouterKey) localStorage.setItem(FFSCOUTER_API_KEY_STORAGE_KEY, newFFScouterKey);
+	else localStorage.removeItem(FFSCOUTER_API_KEY_STORAGE_KEY);
+	if (newFFScouterKey !== oldFFScouterKey && currentFactionID) {
+		await clearSpyDataForFactionFromDB(currentFactionID, FFSCOUTER_SPIES_STORE_NAME);
+		document.getElementById("ffscouter-api-error-message")?.remove();
+	}
 
 	if (tsKeyInput.value.trim()) localStorage.setItem(TORNSTATS_API_KEY_STORAGE_KEY, tsKeyInput.value.trim());
-	else localStorage.removeItem(TORNSTATS_API_KEY_STORAGE_KEY);
+	else localStorage.removeItem(TORNSTATS_API_KEY_STORAGE_KEY); // not used
+
 	closeSpiesModal();
 
-	const currentFactionID = new URLSearchParams(window.location.search).get("ID");
 	const stakeoutCheckbox = document.getElementById("factionStakeoutCheckbox");
-	if (currentFactionID && stakeoutCheckbox) {
-		clearSpyDataForFactionFromDB(currentFactionID).then(() => fetchMonitorAndUpdate(currentFactionID, stakeoutCheckbox));
-	}
+	if (currentFactionID && stakeoutCheckbox) fetchMonitorAndUpdate(currentFactionID, stakeoutCheckbox);
 }
 
-async function clearSpyDataForFactionFromDB(factionID) {
+async function clearSpyDataForFactionFromDB(factionID, storeName) {
 	try {
 		const db = await openDB();
 		return new Promise((resolve, reject) => {
-			const transaction = db.transaction([YATA_SPIES_STORE_NAME], "readwrite");
-			const store = transaction.objectStore(YATA_SPIES_STORE_NAME);
+			const transaction = db.transaction([storeName], "readwrite");
+			const store = transaction.objectStore(storeName);
 			const request = store.delete(factionID);
 			request.onsuccess = () => resolve();
 			request.onerror = (event) => {
-				console.error("Error deleting spy data for faction from DB:", event.target.errorCode);
+				console.error(`Error deleting spy data for faction from DB (Store: ${storeName}):`, event.target.errorCode);
 				reject(event.target.errorCode);
 			};
 		});
 	} catch (error) {
-		console.error("Failed to open DB for clearSpyDataForFaction:", error);
+		console.error(`Failed to open DB for clearSpyDataForFaction (Store: ${storeName}):`, error);
 	}
 }
 
@@ -902,12 +1025,11 @@ function openSpiesModal() {
 			marginBottom: "20px",
 			lineHeight: "1.5",
 		},
-		{
-			innerHTML:
-				"Enter your API key(s) for YATA and/or TornStats to fetch spy data for faction members. <br>Make sure these are the same API key(s) you use specific to those services.",
-		}
+		{ innerHTML: "Enter your API key(s) for external services to fetch spy data. <br>Make sure these are the API key(s) specific to those services." }
 	);
-	const cardsContainer = createStyledElement("div", { display: "flex", flexDirection: "column", gap: "20px", marginBottom: "25px" });
+	const cardsContainer = createStyledElement("div", { display: "flex", flexDirection: "column", gap: "15px", marginBottom: "25px" });
+
+	// YATA Card
 	const yataCard = createStyledElement("div", { backgroundColor: "#3a3a3a", padding: "15px", borderRadius: "6px", borderLeft: "4px solid #2980B9" });
 	const yataTitle = createStyledElement("h3", { margin: "0 0 10px 0", color: "#AED6F1" }, { textContent: "YATA" });
 	const yataInput = createStyledElement(
@@ -921,9 +1043,29 @@ function openSpiesModal() {
 			color: "#f0f0f0",
 			fontSize: "0.9em",
 		},
-		{ type: "text", id: YATA_API_KEY_INPUT_ID, value: localStorage.getItem(YATA_API_KEY_STORAGE_KEY) || "" }
+		{ type: "text", id: YATA_API_KEY_INPUT_ID, value: localStorage.getItem(YATA_API_KEY_STORAGE_KEY) || "", placeholder: "Enter your YATA API Key" }
 	);
 	yataCard.append(yataTitle, yataInput);
+
+	// FFScouter Card
+	const ffscouterCard = createStyledElement("div", { backgroundColor: "#3a3a3a", padding: "15px", borderRadius: "6px", borderLeft: "4px solid #3498DB" });
+	const ffscouterTitle = createStyledElement("h3", { margin: "0 0 10px 0", color: "#85C1E9" }, { textContent: "FFScouter" });
+	const ffscouterInput = createStyledElement(
+		"input",
+		{
+			width: "calc(100% - 12px)",
+			padding: "8px",
+			borderRadius: "3px",
+			border: "1px solid #555",
+			backgroundColor: "#222",
+			color: "#f0f0f0",
+			fontSize: "0.9em",
+		},
+		{ type: "text", id: FFSCOUTER_API_KEY_INPUT_ID, value: localStorage.getItem(FFSCOUTER_API_KEY_STORAGE_KEY) || "", placeholder: "Enter your FFScouter API Key" }
+	);
+	ffscouterCard.append(ffscouterTitle, ffscouterInput);
+
+	// TornStats Card (not used)
 	const tsCard = createStyledElement("div", { backgroundColor: "#3a3a3a", padding: "15px", borderRadius: "6px", borderLeft: "4px solid #AF7AC5" });
 	const tsTitle = createStyledElement("h3", { margin: "0 0 10px 0", color: "#D7BDE2" }, { textContent: "TornStats - Not built yet" });
 	const tsInput = createStyledElement(
@@ -937,10 +1079,12 @@ function openSpiesModal() {
 			color: "#f0f0f0",
 			fontSize: "0.9em",
 		},
-		{ type: "text", id: TORNSTATS_API_KEY_INPUT_ID, value: localStorage.getItem(TORNSTATS_API_KEY_STORAGE_KEY) || "" }
+		{ type: "text", id: TORNSTATS_API_KEY_INPUT_ID, value: localStorage.getItem(TORNSTATS_API_KEY_STORAGE_KEY) || "", placeholder: "Not built yet" }
 	);
 	tsCard.append(tsTitle, tsInput);
-	cardsContainer.append(yataCard, tsCard);
+
+	cardsContainer.append(yataCard, ffscouterCard, tsCard);
+
 	const actionsContainer = createStyledElement("div", { display: "flex", justifyContent: "flex-end", gap: "10px" });
 	const saveButton = createStyledElement(
 		"button",
@@ -958,6 +1102,7 @@ function openSpiesModal() {
 	saveButton.onmouseover = () => (saveButton.style.backgroundColor = "#45a049");
 	saveButton.onmouseout = () => (saveButton.style.backgroundColor = "#4CAF50");
 	saveButton.addEventListener("click", saveSpyApiKeys);
+
 	const closeButton = createStyledElement(
 		"button",
 		{
@@ -974,6 +1119,7 @@ function openSpiesModal() {
 	closeButton.onmouseover = () => (closeButton.style.backgroundColor = "#888");
 	closeButton.onmouseout = () => (closeButton.style.backgroundColor = "#777");
 	closeButton.addEventListener("click", closeSpiesModal);
+
 	actionsContainer.append(closeButton, saveButton);
 	modal.append(title, description, cardsContainer, actionsContainer);
 	overlay.appendChild(modal);
@@ -1031,7 +1177,7 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		{ padding: "4px 8px", backgroundColor: "#555", color: "white", border: "1px solid #666", borderRadius: "3px", cursor: "pointer", marginLeft: "10px" },
 		{ id: "stakeoutApiKeyButton" }
 	);
-	const updateButtonText = () => (apiKeyButton.textContent = isApiKeySet() ? "Change API Key" : "Set API Key");
+	const updateButtonText = () => (apiKeyButton.textContent = isApiKeySet() ? "Change Torn API Key" : "Set Torn API Key");
 	updateButtonText();
 	apiKeyButton.addEventListener("click", () => {
 		const newKey = prompt("Please enter your Torn API key:", isApiKeySet() ? currentApiKey : "");
@@ -1087,7 +1233,9 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		clearAllCountdownIntervals();
 		previouslyOkayFactionUserIDs.clear();
 		currentYataSpies = {};
+		currentFFScouterSpies = {};
 		document.getElementById("yata-api-error-message")?.remove();
+		document.getElementById("ffscouter-api-error-message")?.remove();
 	};
 	stakeoutCheckbox.addEventListener("change", () => {
 		if (stakeoutCheckbox.checked) startMonitoring(parseInt(intervalDropdown.value));
@@ -1120,7 +1268,7 @@ function addStakeoutElementsToProfiles(statusElement) {
 		if (intervalId) clearInterval(intervalId);
 		const userID = new URLSearchParams(window.location.search).get("XID");
 		if (!userID || !isApiKeySet()) {
-			if (!isApiKeySet()) alert("Please set your API key on a faction page first to use profile stakeout.");
+			if (!isApiKeySet()) alert("Please set your Torn API key on a faction page first to use profile stakeout.");
 			stakeoutCheckbox.checked = false;
 			return;
 		}
