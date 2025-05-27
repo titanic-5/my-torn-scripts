@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    http://tampermonkey.net/
-// @version      2.5.2
+// @version      2.5.3
 // @description  Stakeout factions or individual users
 // @author       Titanic_
 // @match        https://www.torn.com/profiles.php?XID=*
@@ -12,53 +12,43 @@
 // ==/UserScript==
 
 const API_KEY_PLACEHOLDER = "YOUR_API_KEY_HERE";
-let currentApiKey = localStorage.getItem("stakeoutUserApiKey") || API_KEY_PLACEHOLDER;
-
-const PROFILE_STATUS_SELECTOR = "#profileroot div.profile-status div.title-black.top-round";
-const FACTION_STATUS_SELECTOR = "div#factions > div#react-root";
+const PROFILE_SELECTOR = "#profileroot div.profile-status div.title-black.top-round";
+const FACTION_SELECTOR = "div#factions > div#react-root";
 const ALERT_SOUND_URL = "https://www.myinstants.com/media/sounds/alert.mp3";
+const CRITICAL_TIME_THRESHOLD = 40; // Seconds
 
-const CRITICAL_TIME_THRESHOLD = 40; // Seconds: If hospitalized < this time, queue API call for user endpoint check
-
-const DISPLAY_CONTAINER_ID = "faction-members-status-display";
+const MAIN_CONTAINER_ID = "faction-members-status-display";
 const CONTENT_WRAPPER_ID = "faction-members-content-wrapper";
 const FACTION_CONTROLS_CONTAINER_ID = "stakeout-faction-controls-container";
-const CATEGORY_STATE_PREFIX = "stakeout_category_state_";
-const MAIN_DISPLAY_COLLAPSED_KEY = "stakeout_main_display_collapsed";
+const MODAL_ID = "stakeout-spies-modal";
+const MODAL_OVERLAY_ID = "stakeout-spies-modal-overlay";
+const YATA_API_ID = "stakeout-yata-api-key-input";
+const FFSCOUTER_API_ID = "stakeout-ffscouter-api-key-input";
+const TOOLTIP_ID = "stakeout-spy-tooltip";
 
-const TEXT_SHOW_LIST = "Show Member List";
-const TEXT_HIDE_LIST = "Hide Member List";
+const STATE_PREFIX = "stakeout_category_state_";
+const COLLAPSED_KEY = "stakeout_main_display_collapsed";
+const YATA_KEY = "stakeoutYataApiKey";
+const FFSCOUTER_KEY = "stakeoutFFScouterApiKey";
 
 const STATUS_CATEGORIES = {
 	OKAY: "Okay",
+	OKAY_ABROAD: "Abroad (Not Hospitalized)",
 	HOSPITAL_TORN: "In Hospital (Torn)",
 	HOSPITAL_ABROAD: "In Hospital (Abroad)",
 	TRAVELING: "Traveling",
-	OKAY_ABROAD: "Abroad (Not Hospitalized)",
 	JAIL: "In Jail",
 	OTHER: "Other",
 };
-
 const CATEGORY_ORDER = [
 	STATUS_CATEGORIES.OKAY,
 	STATUS_CATEGORIES.HOSPITAL_TORN,
-	STATUS_CATEGORIES.HOSPITAL_ABROAD,
 	STATUS_CATEGORIES.TRAVELING,
 	STATUS_CATEGORIES.OKAY_ABROAD,
+	STATUS_CATEGORIES.HOSPITAL_ABROAD,
 	STATUS_CATEGORIES.JAIL,
 	STATUS_CATEGORIES.OTHER,
 ];
-
-const YATA_API_KEY_STORAGE_KEY = "stakeoutYataApiKey";
-const TORNSTATS_API_KEY_STORAGE_KEY = "stakeoutTornStatsApiKey"; // not used
-const FFSCOUTER_API_KEY_STORAGE_KEY = "stakeoutFFScouterApiKey";
-
-const SPIES_MODAL_ID = "stakeout-spies-modal";
-const SPIES_MODAL_OVERLAY_ID = "stakeout-spies-modal-overlay";
-const YATA_API_KEY_INPUT_ID = "stakeout-yata-api-key-input";
-const TORNSTATS_API_KEY_INPUT_ID = "stakeout-tornstats-api-key-input"; // not used
-const FFSCOUTER_API_KEY_INPUT_ID = "stakeout-ffscouter-api-key-input";
-const SPY_TOOLTIP_ID = "stakeout-spy-tooltip";
 
 const DB_NAME = "StakeoutDB";
 const DB_VERSION = 2;
@@ -66,15 +56,16 @@ const YATA_SPIES_STORE_NAME = "yataFactionSpies";
 const FFSCOUTER_SPIES_STORE_NAME = "ffscouterFactionSpies";
 
 const CACHE_DURATION_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
-const MAX_FFSCOUTER_TARGETS_PER_REQUEST = 205;
+const FFSCOUTER_TARGETS_PER_REQ = 205;
 
-let individualMonitorTimeouts = new Map();
-let activeCountdownIntervals = new Map();
-let currentDisplayableMemberStatuses = [];
-let previouslyOkayFactionUserIDs = new Set();
+let currentApiKey = localStorage.getItem("stakeoutUserApiKey") || API_KEY_PLACEHOLDER;
+let timeouts = new Map();
+let countdowns = new Map();
+let currentStatuses = [];
+let previouslyOkayIDs = new Set();
 let currentYataSpies = {};
 let currentFFScouterSpies = {};
-let spiesModalEscapeKeyListener = null;
+let modalEscapeKeyListener = null;
 let dbPromise = null;
 
 function createStyledElement(tag, styles = {}, attributes = {}) {
@@ -86,62 +77,55 @@ function createStyledElement(tag, styles = {}, attributes = {}) {
 
 function parseTimeToSeconds(description) {
 	if (!description) return Infinity;
-	const descLower = description.toLowerCase();
 	const timePattern =
 		/(?:for|in|lands in)\s+(?=(?:(?:\d+\s*(?:days?|d))|(?:\d+\s*(?:hours?|hrs?|h))|(?:\d+\s*(?:minutes?|mins?|m))|(?:\d+\s*(?:seconds?|secs?|s))))(?:(\d+)\s*(?:days?|d))?\s*(?:(\d+)\s*(?:hours?|hrs?|h))?\s*(?:(\d+)\s*(?:minutes?|mins?|m))?\s*(?:(\d+)\s*(?:seconds?|secs?|s))?/i;
-	const match = descLower.match(timePattern);
-	if (match) {
-		const days = parseInt(match[1]) || 0;
-		const hours = parseInt(match[2]) || 0;
-		const minutes = parseInt(match[3]) || 0;
-		const seconds = parseInt(match[4]) || 0;
-		const totalSeconds = days * 86400 + hours * 3600 + minutes * 60 + seconds;
-		return totalSeconds > 0 ? totalSeconds : Infinity;
-	}
-	return Infinity;
+	const match = description.toLowerCase().match(timePattern);
+	if (!match) return Infinity;
+	const d = parseInt(match[1]) || 0,
+		h = parseInt(match[2]) || 0,
+		m = parseInt(match[3]) || 0,
+		s = parseInt(match[4]) || 0;
+	const totalSeconds = d * 86400 + h * 3600 + m * 60 + s;
+	return totalSeconds > 0 ? totalSeconds : Infinity;
 }
 
 function formatTimeDescription(baseDescription, remainingSeconds) {
 	const fullTimePhrasePattern = /((?:for|in|lands in)\s+)((?:\d+\s+(?:days?|d|hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b(?:\s+|$)?)+)/i;
 	const match = baseDescription.match(fullTimePhrasePattern);
-
 	let newTimeValue;
-	if (remainingSeconds <= 0) newTimeValue = "now";
-	else if (remainingSeconds < 60) newTimeValue = `${remainingSeconds}s`;
-	else if (remainingSeconds < 3600) {
-		const mins = Math.floor(remainingSeconds / 60);
-		const secs = remainingSeconds % 60;
-		newTimeValue = secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
-	} else if (remainingSeconds < 86400) {
-		const hrs = Math.floor(remainingSeconds / 3600);
-		const mins = Math.floor((remainingSeconds % 3600) / 60);
-		newTimeValue = mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
-	} else {
-		const days = Math.floor(remainingSeconds / 86400);
-		const hrs = Math.floor((remainingSeconds % 86400) / 3600);
-		newTimeValue = hrs > 0 ? `${days}d ${hrs}h` : `${days}d`;
-	}
 
-	if (match && match[0]) return baseDescription.replace(match[0], `${match[1]}${newTimeValue}`);
-	else return `${baseDescription} (${newTimeValue})`;
+	if (remainingSeconds <= 0) newTimeValue = "now";
+	else {
+		const d = Math.floor(remainingSeconds / 86400);
+		const h = Math.floor((remainingSeconds % 86400) / 3600);
+		const m = Math.floor((remainingSeconds % 3600) / 60);
+		const s = remainingSeconds % 60;
+
+		if (d > 0) newTimeValue = `${d}d` + (h > 0 ? ` ${h}h` : "");
+		else if (h > 0) newTimeValue = `${h}h` + (m > 0 ? ` ${m}m` : "");
+		else if (m > 0) newTimeValue = `${m}m` + (s > 0 ? ` ${s}s` : "");
+		else newTimeValue = `${s}s`;
+	}
+	if (match?.[0]) return baseDescription.replace(match[0], `${match[1]}${newTimeValue}`);
+	return `${baseDescription} (${newTimeValue})`;
 }
 
 function isApiKeySet() {
 	return currentApiKey && currentApiKey !== API_KEY_PLACEHOLDER;
 }
-
 function playAlertSound() {
 	new Audio(ALERT_SOUND_URL).play();
 }
-
 function clearAllCountdownIntervals() {
-	activeCountdownIntervals.forEach(({ intervalId }) => clearInterval(intervalId));
-	activeCountdownIntervals.clear();
+	countdowns.forEach(({ intervalId }) => clearInterval(intervalId));
+	countdowns.clear();
 }
-
 function clearAllIndividualMonitors() {
-	individualMonitorTimeouts.forEach(clearTimeout);
-	individualMonitorTimeouts.clear();
+	timeouts.forEach(clearTimeout);
+	timeouts.clear();
+}
+function isCacheValid(cachedItem) {
+	return cachedItem?.timestamp && Date.now() - cachedItem.timestamp < CACHE_DURATION_MS;
 }
 
 function openDB() {
@@ -152,155 +136,97 @@ function openDB() {
 			console.error("IndexedDB error:", event.target.errorCode);
 			reject(event.target.errorCode);
 		};
-		request.onsuccess = (event) => {
-			resolve(event.target.result);
-		};
+		request.onsuccess = (event) => resolve(event.target.result);
 		request.onupgradeneeded = (event) => {
 			const db = event.target.result;
-			if (!db.objectStoreNames.contains(YATA_SPIES_STORE_NAME)) {
-				db.createObjectStore(YATA_SPIES_STORE_NAME, { keyPath: "factionID" });
-			}
-			if (!db.objectStoreNames.contains(FFSCOUTER_SPIES_STORE_NAME)) {
-				db.createObjectStore(FFSCOUTER_SPIES_STORE_NAME, { keyPath: "factionID" });
-			}
+			if (!db.objectStoreNames.contains(YATA_SPIES_STORE_NAME)) db.createObjectStore(YATA_SPIES_STORE_NAME, { keyPath: "factionID" });
+			if (!db.objectStoreNames.contains(FFSCOUTER_SPIES_STORE_NAME)) db.createObjectStore(FFSCOUTER_SPIES_STORE_NAME, { keyPath: "factionID" });
 		};
 	});
 	return dbPromise;
 }
 
-async function getSpyDataFromDB(factionID, storeName) {
+async function operateOnDB(storeName, mode, operationCallback) {
 	try {
 		const db = await openDB();
 		return new Promise((resolve, reject) => {
-			const transaction = db.transaction([storeName], "readonly");
+			const transaction = db.transaction([storeName], mode);
 			const store = transaction.objectStore(storeName);
-			const request = store.get(factionID);
-			request.onsuccess = (event) => resolve(event.target.result);
+			const request = operationCallback(store);
+			request.onsuccess = (event) => resolve(request.result === undefined ? true : request.result);
 			request.onerror = (event) => {
-				console.error(`Error getting spy data from DB (Store: ${storeName}):`, event.target.errorCode);
+				console.error(`DB Error (Store: ${storeName}, Mode: ${mode}):`, event.target.errorCode);
 				reject(event.target.errorCode);
 			};
 		});
 	} catch (error) {
-		console.error(`Failed to open DB for getSpyData (Store: ${storeName}):`, error);
+		console.error(`Failed to open DB for ${storeName} operation:`, error);
 		return null;
 	}
 }
 
-async function saveSpyDataToDB(factionID, spyData, storeName) {
-	try {
-		const db = await openDB();
-		return new Promise((resolve, reject) => {
-			const transaction = db.transaction([storeName], "readwrite");
-			const store = transaction.objectStore(storeName);
-			const item = {
-				factionID: factionID,
-				data: spyData,
-				timestamp: Date.now(),
-			};
-			const request = store.put(item);
-			request.onsuccess = () => resolve();
-			request.onerror = (event) => {
-				console.error(`Error saving spy data to DB (Store: ${storeName}):`, event.target.errorCode);
-				reject(event.target.errorCode);
-			};
-		});
-	} catch (error) {
-		console.error(`Failed to open DB for saveSpyData (Store: ${storeName}):`, error);
-	}
+function getSpyDataFromDB(factionID, storeName) {
+	return operateOnDB(storeName, "readonly", (store) => store.get(factionID));
 }
-
-function isCacheValid(cachedItem) {
-	if (!cachedItem || !cachedItem.timestamp) return false;
-	return Date.now() - cachedItem.timestamp < CACHE_DURATION_MS;
+function saveSpyDataToDB(factionID, spyData, storeName) {
+	return operateOnDB(storeName, "readwrite", (store) => store.put({ factionID, data: spyData, timestamp: Date.now() }));
+}
+function clearSpyDataForFactionFromDB(factionID, storeName) {
+	return operateOnDB(storeName, "readwrite", (store) => store.delete(factionID));
 }
 
 async function clearOldSpyDataFromDB() {
-	const storesToClean = [YATA_SPIES_STORE_NAME, FFSCOUTER_SPIES_STORE_NAME];
-	for (const storeName of storesToClean) {
-		try {
-			const db = await openDB();
-			const transaction = db.transaction([storeName], "readwrite");
-			const store = transaction.objectStore(storeName);
-			const request = store.openCursor();
-
-			request.onsuccess = (event) => {
+	for (const storeName of [YATA_SPIES_STORE_NAME, FFSCOUTER_SPIES_STORE_NAME]) {
+		operateOnDB(storeName, "readwrite", (store) => {
+			const cursorRequest = store.openCursor();
+			cursorRequest.onsuccess = (event) => {
 				const cursor = event.target.result;
 				if (cursor) {
 					if (!isCacheValid(cursor.value)) store.delete(cursor.primaryKey);
 					cursor.continue();
 				}
 			};
-			request.onerror = (event) => console.error(`Error clearing old spy data from DB (Store: ${storeName}):`, event.target.errorCode);
-		} catch (error) {
-			console.error(`Failed to open DB for clearOldSpyDataFromDB (Store: ${storeName}):`, error);
-		}
+			return cursorRequest;
+		}).catch((error) => console.error(`Error clearing old spy data from ${storeName}:`, error));
 	}
 }
 
 async function fetchApi(endpoint, selections = "basic", apiKey = currentApiKey) {
-	return new Promise((resolve, reject) => {
+	return new Promise((resolve) => {
 		const isTornApi = endpoint.startsWith("user/") || endpoint.startsWith("faction/");
 		const isFFScouterApi = endpoint.startsWith("https://ffscouter.com/api/v1/get-stats");
 
-		if (isTornApi && (!apiKey || apiKey === API_KEY_PLACEHOLDER)) {
-			console.warn("Stakeout Script: Torn API Key not set for endpoint:", endpoint);
-			resolve({ error: { error: "API Key not set" } });
-			return;
-		}
-		if (!isTornApi && !isFFScouterApi && !apiKey) {
-			resolve({ error: { error: "API Key not set for external service" } });
-			return;
-		}
+		if (isTornApi && (!apiKey || apiKey === API_KEY_PLACEHOLDER)) return resolve({ error: { error: "API Key not set" } });
 
-		const baseUrl = isTornApi ? "https://api.torn.com/" : "";
-		let finalUrl;
+		if (!isTornApi && !isFFScouterApi && !apiKey && !endpoint.includes("key=")) return resolve({ error: { error: "API Key not set for external service" } });
 
-		if (isTornApi) finalUrl = `${baseUrl}${endpoint}?key=${apiKey}&selections=${selections}`;
-		else if (isFFScouterApi) finalUrl = endpoint;
-		else {
-			if (endpoint.includes("?")) finalUrl = `${endpoint}&key=${apiKey}`;
-			else finalUrl = `${endpoint}?key=${apiKey}`;
-		}
+		let finalUrl = isTornApi ? `https://api.torn.com/${endpoint}?key=${apiKey}&selections=${selections}` : endpoint;
+		if (!isTornApi && !isFFScouterApi && !finalUrl.includes("key=")) finalUrl += `${finalUrl.includes("?") ? "&" : "?"}key=${apiKey}`;
 
 		GM_xmlhttpRequest({
 			method: "GET",
 			url: finalUrl,
 			timeout: 15000,
-			onload: function (response) {
-				if (response.status >= 200 && response.status < 300) {
-					try {
-						const data = JSON.parse(response.responseText);
-						// YATA error structure: { error: { code: X, error: "message" } }
-						// FFScouter error structure: Don't come with 2xx, error comes with 4xx.
-						if (data?.error && data.error.error) {
-							const errorMsg = data.error.error || JSON.stringify(data.error);
-							console.error(`API Error (${finalUrl.split("?")[0]} - Status ${response.status}):`, errorMsg);
-						}
+			onload: (response) => {
+				try {
+					const data = JSON.parse(response.responseText);
+					if (response.status < 200 || response.status >= 300 || data?.error?.error) {
+						const errorMsg = data?.error?.error || `HTTP Error ${response.status}`;
+						console.error(`API Error (${finalUrl.split("?")[0]}):`, errorMsg, data?.error ? "" : response.responseText);
+						resolve(data?.error ? { error: data.error } : { error: { error: errorMsg, response: response.responseText } });
+					} else {
 						resolve(data);
-					} catch (e) {
-						console.error(`Error parsing JSON response from ${finalUrl.split("?")[0]}:`, e, "Response:", response.responseText);
-						resolve({ error: { error: "JSON Parse Error", details: e.message, response: response.responseText } });
 					}
-				} else {
-					console.error(`API Request Failed for ${finalUrl.split("?")[0]}: Status ${response.status}`, "Response:", response.responseText);
-					try {
-						const data = JSON.parse(response.responseText);
-						// FFScouter errors: { code: X, error: "message" }
-						// YATA errors: { error: { code: X, error: "message" } }
-						if (data?.error?.error) resolve({ error: data.error });
-						else if (data?.code && data?.error) resolve(data);
-						else resolve({ error: { error: `HTTP Error ${response.status}`, response: response.responseText } });
-					} catch (e) {
-						resolve({ error: { error: `HTTP Error ${response.status}`, response: response.responseText } });
-					}
+				} catch (e) {
+					console.error(`Error parsing JSON from ${finalUrl.split("?")[0]}:`, e, response.responseText);
+					resolve({ error: { error: "JSON Parse Error", details: e.message, response: response.responseText } });
 				}
 			},
-			onerror: function (response) {
+			onerror: (response) => {
 				console.error(`Network Error for ${finalUrl.split("?")[0]}:`, response);
 				resolve({ error: { error: "Network Error", details: response.statusText || "Unknown network issue" } });
 			},
-			ontimeout: function () {
+			ontimeout: () => {
 				console.error(`Request Timeout for ${finalUrl.split("?")[0]}`);
 				resolve({ error: { error: "Request Timeout" } });
 			},
@@ -325,113 +251,89 @@ function formatStatValue(num) {
 	}
 	const precision = i === 1 && tempNum < 100 ? 1 : i > 0 ? 2 : 0;
 	let formattedNum = (num / Math.pow(1000, i)).toFixed(precision);
-	formattedNum = formattedNum.replace(/\.0+$/, "");
-	return formattedNum + suffixes[i];
+	return formattedNum.replace(/\.0+$/, "") + suffixes[i];
 }
 
 function formatSpyTimestamp(unixTimestamp) {
 	if (!unixTimestamp || unixTimestamp === 0) return "Unknown age";
-	const spyDate = new Date(unixTimestamp * 1000);
-	const now = new Date();
-	const diffMs = now - spyDate;
-	const diffSeconds = Math.floor(diffMs / 1000);
-	const diffMinutes = Math.floor(diffSeconds / 60);
-	const diffHours = Math.floor(diffMinutes / 60);
-	const diffDays = Math.floor(diffHours / 24);
-	const diffMonths = Math.floor(diffDays / 30.44);
-	const diffYears = Math.floor(diffDays / 365.25);
+	const diffSeconds = Math.floor((Date.now() - unixTimestamp * 1000) / 1000);
 
-	if (diffYears > 0) return `~${diffYears}y ago`;
-	if (diffMonths > 0) return `~${diffMonths}mo ago`;
-	if (diffDays > 0) return `~${diffDays}d ago`;
-	if (diffHours > 0) return `~${diffHours}h ago`;
-	if (diffMinutes > 0) return `~${diffMinutes}m ago`;
-	return "Just now";
+	if (diffSeconds < 5) return "Just now";
+	const dY = Math.floor(diffSeconds / (365.25 * 86400));
+	if (dY > 0) return `~${dY}y ago`;
+	const dMo = Math.floor(diffSeconds / (30.44 * 86400));
+	if (dMo > 0) return `~${dMo}mo ago`;
+	const dD = Math.floor(diffSeconds / 86400);
+	if (dD > 0) return `~${dD}d ago`;
+	const dH = Math.floor(diffSeconds / 3600);
+	if (dH > 0) return `~${dH}h ago`;
+	const dM = Math.floor(diffSeconds / 60);
+	if (dM > 0) return `~${dM}m ago`;
+	return `~${diffSeconds}s ago`;
+}
+
+function createApiErrorDisplay(serviceName, errorMessage, errorId) {
+	const controlsContainer = document.getElementById(FACTION_CONTROLS_CONTAINER_ID);
+	if (controlsContainer && !document.getElementById(errorId)) {
+		const errorMsgElement = createStyledElement(
+			"p",
+			{ color: "yellow", fontSize: "0.8em", marginLeft: "10px" },
+			{ id: errorId, textContent: `${serviceName} API: ${errorMessage}` }
+		);
+		controlsContainer.appendChild(errorMsgElement);
+	}
 }
 
 async function fetchYataSpies(factionID) {
-	const yataApiKey = localStorage.getItem(YATA_API_KEY_STORAGE_KEY);
+	const yataApiKey = localStorage.getItem(YATA_KEY);
 	if (!yataApiKey) return null;
 
-	const cachedData = await getSpyDataFromDB(factionID, YATA_SPIES_STORE_NAME);
-	if (cachedData && isCacheValid(cachedData) && cachedData.data && cachedData.data.spies && Object.keys(cachedData.data.spies).length > 0) {
-		return cachedData.data;
+	const cached = await getSpyDataFromDB(factionID, YATA_SPIES_STORE_NAME);
+	if (cached && isCacheValid(cached) && cached.data?.spies && Object.keys(cached.data.spies).length > 0) {
+		return cached.data;
 	}
 
-	const endpoint = `https://yata.yt/api/v1/spies/?faction=${factionID}`;
-	const freshData = await fetchApi(endpoint, "", yataApiKey);
-
+	const freshData = await fetchApi(`https://yata.yt/api/v1/spies/?faction=${factionID}`, "", yataApiKey);
 	if (freshData && !freshData.error) {
 		await saveSpyDataToDB(factionID, freshData, YATA_SPIES_STORE_NAME);
 		return freshData;
 	}
 	if (freshData?.error) {
-		const yataError = freshData.error;
-		const errorMessage = yataError.error || JSON.stringify(yataError);
-		const errorCode = yataError.code;
-
-		if (errorCode === 2 && (errorMessage.includes("No spies for faction") || errorMessage.includes("No spies") || errorMessage.includes("faction not found")))
-			console.log("YATA: No spies for faction ID:", factionID, "or faction not found.");
-		else {
-			console.error("YATA Spies API Error:", errorMessage, errorCode ? `(Code: ${errorCode})` : "");
-			const controlsContainer = document.getElementById(FACTION_CONTROLS_CONTAINER_ID);
-			if (controlsContainer && !document.getElementById("yata-api-error-message")) {
-				const errorMsgElement = createStyledElement(
-					"p",
-					{ color: "yellow", fontSize: "0.8em", marginLeft: "10px" },
-					{ id: "yata-api-error-message", textContent: `YATA API: ${errorMessage.substring(0, 50)}... (see console)` }
-				);
-				controlsContainer.appendChild(errorMsgElement);
-			}
+		const { error, code } = freshData.error;
+		const msg = error || JSON.stringify(freshData.error);
+		if (code === 2 && (msg.includes("No spies") || msg.includes("faction not found"))) {
+			console.log("YATA: No spies for faction or faction not found:", factionID);
+		} else {
+			console.error("YATA Spies API Error:", msg, code ? `(Code: ${code})` : "");
+			createApiErrorDisplay("YATA", msg, "yata-api-error-message");
 		}
 	}
 	return null;
 }
 
 async function fetchFFScouterSpies(factionID, memberIDs) {
-	const ffscouterApiKey = localStorage.getItem(FFSCOUTER_API_KEY_STORAGE_KEY);
+	const ffscouterApiKey = localStorage.getItem(FFSCOUTER_KEY);
 	if (!ffscouterApiKey || memberIDs.length === 0) return null;
 
-	const cachedData = await getSpyDataFromDB(factionID, FFSCOUTER_SPIES_STORE_NAME);
-	if (cachedData && isCacheValid(cachedData) && cachedData.data && Object.keys(cachedData.data).length > 0) {
-		return cachedData.data;
-	}
+	const cached = await getSpyDataFromDB(factionID, FFSCOUTER_SPIES_STORE_NAME);
+	if (cached && isCacheValid(cached) && cached.data && Object.keys(cached.data).length > 0) return cached.data;
 
 	let allFFScouterData = {};
-	const memberIDChunks = [];
-	for (let i = 0; i < memberIDs.length; i += MAX_FFSCOUTER_TARGETS_PER_REQUEST) {
-		memberIDChunks.push(memberIDs.slice(i, i + MAX_FFSCOUTER_TARGETS_PER_REQUEST));
-	}
-
-	for (const chunk of memberIDChunks) {
-		const targetsParam = chunk.join(",");
-		const endpoint = `https://ffscouter.com/api/v1/get-stats?key=${ffscouterApiKey}&targets=${targetsParam}`;
+	for (let i = 0; i < memberIDs.length; i += FFSCOUTER_TARGETS_PER_REQ) {
+		const chunk = memberIDs.slice(i, i + FFSCOUTER_TARGETS_PER_REQ);
+		const endpoint = `https://ffscouter.com/api/v1/get-stats?key=${ffscouterApiKey}&targets=${chunk.join(",")}`;
 		const responseData = await fetchApi(endpoint);
 
-		if (responseData && Array.isArray(responseData))
-			responseData.forEach((spy) => {
-				allFFScouterData[spy.player_id.toString()] = spy;
-			});
-		else if (responseData && responseData.code && responseData.error) {
+		if (Array.isArray(responseData)) responseData.forEach((spy) => (allFFScouterData[spy.player_id.toString()] = spy));
+		else if (responseData?.code && responseData?.error) {
 			console.error(`FFScouter API Error (Code ${responseData.code}): ${responseData.error}`);
-			if (responseData.code === 6) {
-				const controlsContainer = document.getElementById(FACTION_CONTROLS_CONTAINER_ID);
-				if (controlsContainer && !document.getElementById("ffscouter-api-error-message")) {
-					const errorMsgElement = createStyledElement(
-						"p",
-						{ color: "yellow", fontSize: "0.8em", marginLeft: "10px" },
-						{ id: "ffscouter-api-error-message", textContent: `FFScouter API: ${responseData.error.substring(0, 50)}... (see console)` }
-					);
-					controlsContainer.appendChild(errorMsgElement);
-				}
-			}
-			if (responseData.code === 1 || responseData.code === 2 || responseData.code === 6) return null;
+			if (responseData.code === 6) createApiErrorDisplay("FFScouter", responseData.error, "ffscouter-api-error-message");
+			if ([1, 2, 6].includes(responseData.code)) return null;
 		} else if (responseData?.error) {
 			console.error("FFScouter Fetch Error:", responseData.error.error || responseData.error);
 			return null;
 		}
 	}
-
 	if (Object.keys(allFFScouterData).length > 0) {
 		await saveSpyDataToDB(factionID, allFFScouterData, FFSCOUTER_SPIES_STORE_NAME);
 		return allFFScouterData;
@@ -441,53 +343,79 @@ async function fetchFFScouterSpies(factionID, memberIDs) {
 
 async function checkIndividualUserAndAlert(alertedUserID) {
 	const stakeoutCheckbox = document.getElementById("factionStakeoutCheckbox");
-	if ((!stakeoutCheckbox || !stakeoutCheckbox.checked) && individualMonitorTimeouts.has(alertedUserID)) {
-		clearTimeout(individualMonitorTimeouts.get(alertedUserID));
-		individualMonitorTimeouts.delete(alertedUserID);
+	if (!stakeoutCheckbox?.checked && timeouts.has(alertedUserID)) {
+		clearTimeout(timeouts.get(alertedUserID));
+		timeouts.delete(alertedUserID);
 		return;
 	}
 
-	if (individualMonitorTimeouts.has(alertedUserID)) {
-		clearTimeout(individualMonitorTimeouts.get(alertedUserID));
-		individualMonitorTimeouts.delete(alertedUserID);
+	if (timeouts.has(alertedUserID)) {
+		clearTimeout(timeouts.get(alertedUserID));
+		timeouts.delete(alertedUserID);
 	}
-
 	if (!isApiKeySet()) return;
 
 	const data = await fetchApi(`user/${alertedUserID}`);
 	if (data?.error) return;
 
 	if (data?.status?.state === "Okay") {
-		if (!previouslyOkayFactionUserIDs.has(alertedUserID)) playAlertSound();
-		previouslyOkayFactionUserIDs.add(alertedUserID);
+		if (!previouslyOkayIDs.has(alertedUserID)) playAlertSound();
+		previouslyOkayIDs.add(alertedUserID);
 
-		const memberToUpdate = currentDisplayableMemberStatuses.find((m) => m.userID === alertedUserID);
+		const memberToUpdate = currentStatuses.find((m) => m.userID === alertedUserID);
 		if (memberToUpdate) {
-			memberToUpdate.status = "Okay";
-			memberToUpdate.description = data.status.description || "Available";
-			memberToUpdate.durationSeconds = 0;
-			memberToUpdate.lastActionStatus = data.last_action?.status || memberToUpdate.lastActionStatus;
+			Object.assign(memberToUpdate, {
+				status: "Okay",
+				description: data.status.description || "Available",
+				durationSeconds: 0,
+				lastActionStatus: data.last_action?.status || memberToUpdate.lastActionStatus,
+			});
 		}
-
-		if (activeCountdownIntervals.has(alertedUserID)) {
-			clearInterval(activeCountdownIntervals.get(alertedUserID).intervalId);
-			activeCountdownIntervals.delete(alertedUserID);
+		if (countdowns.has(alertedUserID)) {
+			clearInterval(countdowns.get(alertedUserID).intervalId);
+			countdowns.delete(alertedUserID);
 		}
-
 		const currentFactionID = new URLSearchParams(window.location.search).get("ID");
-		if (currentFactionID) updateFactionDisplay(currentDisplayableMemberStatuses, currentFactionID);
+		if (currentFactionID) updateFactionDisplay(currentStatuses, currentFactionID);
 	}
+}
+
+function createActionButton(icon, title, href, baseColor, hoverColor, additionalStyles = {}) {
+	const button = createStyledElement(
+		"a",
+		{
+			padding: "3px 5px",
+			fontSize: "1em",
+			color: "#f0f0f0",
+			textDecoration: "none",
+			borderRadius: "3px",
+			border: `1px solid ${hoverColor}`,
+			cursor: "pointer",
+			display: "inline-flex",
+			alignItems: "center",
+			lineHeight: "1",
+			backgroundColor: baseColor,
+			...additionalStyles,
+		},
+		{ href, target: "_blank", title, innerHTML: icon }
+	);
+	button.onmouseover = () => (button.style.backgroundColor = hoverColor);
+	button.onmouseout = () => (button.style.backgroundColor = baseColor);
+	return button;
 }
 
 function createMemberElement(member, categoryName) {
 	const isTimedStatus = categoryName.includes("Hospital") || categoryName.includes("Jail") || categoryName.includes("Traveling");
 
-	if (isTimedStatus && member.durationSeconds < CRITICAL_TIME_THRESHOLD && member.durationSeconds !== Infinity && member.durationSeconds > 0) {
-		if (!individualMonitorTimeouts.has(member.userID)) {
-			const checkDelayMs = Math.max(1000, member.durationSeconds * 1000);
-			const timeoutId = setTimeout(() => checkIndividualUserAndAlert(member.userID), checkDelayMs);
-			individualMonitorTimeouts.set(member.userID, timeoutId);
-		}
+	if (
+		isTimedStatus &&
+		member.durationSeconds < CRITICAL_TIME_THRESHOLD &&
+		member.durationSeconds !== Infinity &&
+		member.durationSeconds > 0 &&
+		!timeouts.has(member.userID)
+	) {
+		const timeoutId = setTimeout(() => checkIndividualUserAndAlert(member.userID), Math.max(1000, member.durationSeconds * 1000));
+		timeouts.set(member.userID, timeoutId);
 	}
 
 	const memberDiv = createStyledElement("div", {
@@ -495,31 +423,38 @@ function createMemberElement(member, categoryName) {
 		fontSize: "0.9em",
 		backgroundColor: "#383838",
 		borderRadius: "3px",
-		borderLeft: "3px solid transparent",
 		display: "flex",
 		justifyContent: "space-between",
 		alignItems: "flex-start",
 		position: "relative",
+		borderLeft: `3px solid ${
+			member.status === "Okay"
+				? "#4CAF50"
+				: member.status.includes("Hospital")
+				? "#FF9800"
+				: member.status === "Traveling"
+				? "#2196F3"
+				: member.status === "Abroad"
+				? "#9C27B0"
+				: member.status.includes("Jail")
+				? member.status.includes("Federal")
+					? "#f44336"
+					: "#FFEB3B"
+				: "white"
+		}`,
 	});
 
-	let statusColor = "white";
-	if (member.status === "Okay") statusColor = "#4CAF50";
-	else if (member.status.includes("Hospital")) statusColor = "#FF9800";
-	else if (member.status === "Traveling") statusColor = "#2196F3";
-	else if (member.status === "Abroad") statusColor = "#9C27B0";
-	else if (member.status.includes("Jail")) statusColor = member.status.includes("Federal") ? "#f44336" : "#FFEB3B";
-	memberDiv.style.borderLeftColor = statusColor;
-
 	const memberInfoContainer = createStyledElement("div", { display: "flex", flexDirection: "column", flexGrow: 1, marginRight: "8px" });
-	const onlineStatusIcon = createStyledElement("span", { width: "10px", height: "10px", borderRadius: "50%", marginRight: "6px", flexShrink: 0 });
-	if (member.lastActionStatus === "Online") onlineStatusIcon.style.backgroundColor = "#4CAF50";
-	else if (member.lastActionStatus === "Idle") onlineStatusIcon.style.backgroundColor = "#FF9800";
-	else onlineStatusIcon.style.backgroundColor = "#9E9E9E";
-
-	const nameSpan = createStyledElement("span", { fontWeight: "bold", color: "#E0E0E0" }, { textContent: member.name });
+	const onlineStatusIcon = createStyledElement("span", {
+		width: "10px",
+		height: "10px",
+		borderRadius: "50%",
+		marginRight: "6px",
+		flexShrink: 0,
+		backgroundColor: member.lastActionStatus === "Online" ? "#4CAF50" : member.lastActionStatus === "Idle" ? "#FF9800" : "#9E9E9E",
+	});
 	const nameContainer = createStyledElement("div", { display: "flex", alignItems: "center", marginBottom: "1px" });
-	nameContainer.append(onlineStatusIcon, nameSpan);
-
+	nameContainer.append(onlineStatusIcon, createStyledElement("span", { fontWeight: "bold", color: "#E0E0E0" }, { textContent: member.name }));
 	const statusDescSpan = createStyledElement(
 		"span",
 		{ color: "#B0B0B0", fontSize: "0.85em", display: "block", marginTop: "2px" },
@@ -528,187 +463,116 @@ function createMemberElement(member, categoryName) {
 	memberInfoContainer.append(nameContainer, statusDescSpan);
 
 	if (isTimedStatus && member.durationSeconds < 60 && member.durationSeconds !== Infinity && member.durationSeconds > 0) {
-		if (activeCountdownIntervals.has(member.userID)) clearInterval(activeCountdownIntervals.get(member.userID).intervalId);
+		if (countdowns.has(member.userID)) clearInterval(countdowns.get(member.userID).intervalId);
 		const endTime = Date.now() + member.durationSeconds * 1000;
-		const baseDescriptionForTimer = member.description;
 		const intervalId = setInterval(() => {
-			const remainingSeconds = Math.max(0, Math.round((endTime - Date.now()) / 1000));
-			const currentDescSpan = document.getElementById(`status-desc-${member.userID}`);
-			if (currentDescSpan) currentDescSpan.textContent = `(${formatTimeDescription(baseDescriptionForTimer, remainingSeconds)})`;
-			if (remainingSeconds <= 0) {
+			const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
+			const descSpan = document.getElementById(`status-desc-${member.userID}`);
+			if (descSpan) descSpan.textContent = `(${formatTimeDescription(member.description, remaining)})`;
+			if (remaining <= 0) {
 				clearInterval(intervalId);
-				activeCountdownIntervals.delete(member.userID);
+				countdowns.delete(member.userID);
 			}
 		}, 1000);
-		activeCountdownIntervals.set(member.userID, { intervalId, originalDescription: baseDescriptionForTimer });
-		statusDescSpan.textContent = `(${formatTimeDescription(baseDescriptionForTimer, Math.max(0, member.durationSeconds))})`;
-	} else if (activeCountdownIntervals.has(member.userID)) {
-		clearInterval(activeCountdownIntervals.get(member.userID).intervalId);
-		activeCountdownIntervals.delete(member.userID);
+		countdowns.set(member.userID, { intervalId, originalDescription: member.description });
+		statusDescSpan.textContent = `(${formatTimeDescription(member.description, Math.max(0, member.durationSeconds))})`;
+	} else if (countdowns.has(member.userID)) {
+		clearInterval(countdowns.get(member.userID).intervalId);
+		countdowns.delete(member.userID);
 	}
 
 	const actionsContainer = createStyledElement("div", { display: "flex", gap: "5px", flexShrink: 0, alignItems: "center" });
+	const spyData =
+		member.yataSpyData && (member.yataSpyData.total > 0 || Object.values(member.yataSpyData).some((v) => typeof v === "number" && v > 0 && v !== -1))
+			? { source: "yata", data: member.yataSpyData }
+			: member.ffscouterSpyData && (member.ffscouterSpyData.bs_estimate !== null || member.ffscouterSpyData.fair_fight !== null)
+			? { source: "ffscouter", data: member.ffscouterSpyData }
+			: null;
 
-	let spyDataSource = null;
-	let actualSpyData = null;
-
-	if (member.yataSpyData && (member.yataSpyData.total > 0 || Object.values(member.yataSpyData).some((v) => typeof v === "number" && v > 0 && v !== -1))) {
-		spyDataSource = "yata";
-		actualSpyData = member.yataSpyData;
-	} else if (member.ffscouterSpyData && (member.ffscouterSpyData.bs_estimate !== null || member.ffscouterSpyData.fair_fight !== null)) {
-		spyDataSource = "ffscouter";
-		actualSpyData = member.ffscouterSpyData;
-	}
-
-	if (spyDataSource && actualSpyData) {
-		const spyButton = createStyledElement(
-			"button",
-			{
-				padding: "3px 5px",
-				fontSize: "1em",
-				color: "#f0f0f0",
-				backgroundColor: spyDataSource === "yata" ? "#3498DB" : "#555",
-				textDecoration: "none",
-				borderRadius: "3px",
-				border: "1px solid #5a6268",
-				cursor: "pointer",
-				display: "inline-flex",
-				alignItems: "center",
-				lineHeight: "1",
-			},
-			{ innerHTML: "🕵️‍♂️" }
-		);
+	if (spyData) {
+		const spyButton = createActionButton("🕵️‍♂️", "", "#", spyData.source === "yata" ? "#3498DB" : "#555", spyData.source === "yata" ? "#2980B9" : "#444", {
+			border: `1px solid ${spyData.source === "yata" ? "#2980B9" : "#5a6268"}`,
+		});
+		spyButton.onclick = (e) => e.preventDefault();
 		spyButton.onmouseover = (event) => {
-			let tooltip = document.getElementById(SPY_TOOLTIP_ID);
-			if (!tooltip) {
-				tooltip = createStyledElement(
-					"div",
-					{
-						position: "absolute",
-						backgroundColor: "#2c2c2c",
-						color: "#e0e0e0",
-						padding: "10px 12px",
-						borderRadius: "6px",
-						border: "1px solid #555",
-						zIndex: "10001",
-						fontSize: "0.9em",
-						whiteSpace: "nowrap",
-						boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
-						pointerEvents: "none",
-						minWidth: "220px",
-					},
-					{ id: SPY_TOOLTIP_ID }
+			let tooltip =
+				document.getElementById(TOOLTIP_ID) ||
+				document.body.appendChild(
+					createStyledElement(
+						"div",
+						{
+							position: "absolute",
+							backgroundColor: "#2c2c2c",
+							color: "#e0e0e0",
+							padding: "10px 12px",
+							borderRadius: "6px",
+							border: "1px solid #555",
+							zIndex: "10001",
+							fontSize: "0.9em",
+							whiteSpace: "nowrap",
+							boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+							pointerEvents: "none",
+							minWidth: "220px",
+						},
+						{ id: TOOLTIP_ID }
+					)
 				);
-				document.body.appendChild(tooltip);
-			}
-
-			let tooltipHTML = "";
-			if (spyDataSource === "yata") {
-				const spy = actualSpyData;
-				tooltipHTML = `
-                    <div style="font-family: Verdana, Arial, sans-serif;">
-                        <div style="font-size: 1.15em; font-weight: bold; color: #76D7C4; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #4a4a4a; text-align: center;">
-                            YATA Spy Report
-                        </div>
-                        <div style="display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 5px 12px; margin-bottom: 10px; font-size: 0.95em;">
-                            <span style="font-weight: bold; color: #ccc;">Str:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(spy.strength)}</span>
-                            <span style="font-weight: bold; color: #ccc;">Def:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(spy.defense)}</span>
-                            <span style="font-weight: bold; color: #ccc;">Spd:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(spy.speed)}</span>
-                            <span style="font-weight: bold; color: #ccc;">Dex:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(spy.dexterity)}</span>
-                        </div>
-                        <div style="font-size: 1em; margin-bottom: 8px; padding-top: 8px; border-top: 1px solid #4a4a4a; display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-weight: bold; color: #ddd;">Total:</span>
-                            <span style="font-weight: bold; color: #58D68D; font-size: 1.1em;">${formatStatValue(spy.total)}</span>
-                        </div>
-                        <div style="font-size: 0.85em; color: #999; text-align: right; margin-top: 5px;">
-                            ${formatSpyTimestamp(
-															spy.update ||
-																Math.max(spy.strength_timestamp || 0, spy.speed_timestamp || 0, spy.defense_timestamp || 0, spy.dexterity_timestamp || 0, spy.total_timestamp || 0)
-														)}
-                        </div>
-                    </div>`;
-			} else if (spyDataSource === "ffscouter") {
-				const spy = actualSpyData;
-				tooltipHTML = `
-                    <div style="font-family: Verdana, Arial, sans-serif;">
-                        <div style="font-size: 1.15em; font-weight: bold; color: #5DADE2; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #4a4a4a; text-align: center;">
-                            FFScouter Report
-                        </div>
-                        <div style="display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin-bottom: 10px; font-size: 0.95em;">
-                            <span style="font-weight: bold; color: #ccc;">Fair Fight:</span> <span style="color: #f0f0f0; text-align: right;">${
-															spy.fair_fight !== null ? spy.fair_fight.toFixed(2) : "N/A"
-														}</span>
-                            <span style="font-weight: bold; color: #ccc;">BS Estimate:</span> <span style="color: #f0f0f0; text-align: right;">${
-															spy.bs_estimate_human || (spy.bs_estimate ? formatStatValue(spy.bs_estimate) : "N/A")
-														}</span>
-                        </div>
-                        <div style="font-size: 0.85em; color: #999; text-align: right; margin-top: 10px; padding-top: 5px; border-top: 1px solid #4a4a4a;">
-                            ${formatSpyTimestamp(spy.last_updated)}
-                        </div>
-                    </div>`;
-			}
-			tooltip.innerHTML = tooltipHTML;
+			const s = spyData.data;
+			tooltip.innerHTML =
+				spyData.source === "yata"
+					? `
+                <div style="font-family: Verdana, Arial, sans-serif;">
+                    <div style="font-size: 1.15em; font-weight: bold; color: #76D7C4; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #4a4a4a; text-align: center;">YATA Spy Report</div>
+                    <div style="display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 5px 12px; margin-bottom: 10px; font-size: 0.95em;">
+                        ${["Str", "Def", "Spd", "Dex"]
+													.map(
+														(stat) =>
+															`<span style="font-weight: bold; color: #ccc;">${stat}:</span> <span style="color: #f0f0f0; text-align: right;">${formatStatValue(
+																s[stat.toLowerCase() + "erity"] || s[stat.toLowerCase()]
+															)}</span>`
+													)
+													.join("")}
+                    </div>
+                    <div style="font-size: 1em; margin-bottom: 8px; padding-top: 8px; border-top: 1px solid #4a4a4a; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: bold; color: #ddd;">Total:</span> <span style="font-weight: bold; color: #58D68D; font-size: 1.1em;">${formatStatValue(
+													s.total
+												)}</span>
+                    </div>
+                    <div style="font-size: 0.85em; color: #999; text-align: right; margin-top: 5px;">${formatSpyTimestamp(
+											s.update || Math.max(s.strength_timestamp || 0, s.speed_timestamp || 0, s.defense_timestamp || 0, s.dexterity_timestamp || 0, s.total_timestamp || 0)
+										)}</div>
+                </div>`
+					: `
+                <div style="font-family: Verdana, Arial, sans-serif;">
+                    <div style="font-size: 1.15em; font-weight: bold; color: #5DADE2; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #4a4a4a; text-align: center;">FFScouter Report</div>
+                    <div style="display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin-bottom: 10px; font-size: 0.95em;">
+                        <span style="font-weight: bold; color: #ccc;">Fair Fight:</span> <span style="color: #f0f0f0; text-align: right;">${
+													s.fair_fight !== null ? s.fair_fight.toFixed(2) : "N/A"
+												}</span>
+                        <span style="font-weight: bold; color: #ccc;">BS Estimate:</span> <span style="color: #f0f0f0; text-align: right;">${
+													s.bs_estimate_human || (s.bs_estimate ? formatStatValue(s.bs_estimate) : "N/A")
+												}</span>
+                    </div>
+                    <div style="font-size: 0.85em; color: #999; text-align: right; margin-top: 10px; padding-top: 5px; border-top: 1px solid #4a4a4a;">${formatSpyTimestamp(
+											s.last_updated
+										)}</div>
+                </div>`;
 
 			const rect = spyButton.getBoundingClientRect();
-			let topPosition = rect.bottom + window.scrollY + 7;
-			let leftPosition = rect.left + window.scrollX;
-
 			tooltip.style.display = "block";
-			if (leftPosition + tooltip.offsetWidth > window.innerWidth - 10) leftPosition = rect.right + window.scrollX - tooltip.offsetWidth;
-			if (leftPosition < 10) leftPosition = 10;
-			if (topPosition + tooltip.offsetHeight > window.innerHeight - 10) topPosition = rect.top + window.scrollY - tooltip.offsetHeight - 7;
-			if (topPosition < 10) topPosition = 10;
-			tooltip.style.left = `${leftPosition}px`;
-			tooltip.style.top = `${topPosition}px`;
+			tooltip.style.left = `${Math.min(rect.left + window.scrollX, window.innerWidth - tooltip.offsetWidth - 10)}px`;
+			tooltip.style.top = `${rect.bottom + window.scrollY + 7 + (rect.bottom + tooltip.offsetHeight > window.innerHeight - 10 ? -(tooltip.offsetHeight + rect.height + 14) : 0)}px`;
 		};
 		spyButton.onmouseout = () => {
-			const tooltip = document.getElementById(SPY_TOOLTIP_ID);
-			if (tooltip) tooltip.style.display = "none";
+			const tt = document.getElementById(TOOLTIP_ID);
+			if (tt) tt.style.display = "none";
 		};
 		actionsContainer.appendChild(spyButton);
 	}
-
-	const profileButton = createStyledElement(
-		"a",
-		{
-			padding: "3px 5px",
-			fontSize: "1em",
-			color: "#f0f0f0",
-			backgroundColor: "#555",
-			textDecoration: "none",
-			borderRadius: "3px",
-			border: "1px solid #666",
-			cursor: "pointer",
-			display: "inline-flex",
-			alignItems: "center",
-			lineHeight: "1",
-		},
-		{ href: `https://www.torn.com/profiles.php?XID=${member.userID}`, target: "_blank", title: "View Profile", innerHTML: "👤" }
+	actionsContainer.append(
+		createActionButton("👤", "View Profile", `https://www.torn.com/profiles.php?XID=${member.userID}`, "#555", "#666"),
+		createActionButton("⚔️", "Attack User", `https://www.torn.com/loader.php?sid=attack&user2ID=${member.userID}`, "#c0392b", "#a93226")
 	);
-	profileButton.onmouseover = () => (profileButton.style.backgroundColor = "#666");
-	profileButton.onmouseout = () => (profileButton.style.backgroundColor = "#555");
-
-	const attackButton = createStyledElement(
-		"a",
-		{
-			padding: "3px 5px",
-			fontSize: "1em",
-			color: "#f0f0f0",
-			backgroundColor: "#c0392b",
-			textDecoration: "none",
-			borderRadius: "3px",
-			border: "1px solid #a93226",
-			cursor: "pointer",
-			display: "inline-flex",
-			alignItems: "center",
-			lineHeight: "1",
-		},
-		{ href: `https://www.torn.com/loader.php?sid=attack&user2ID=${member.userID}`, target: "_blank", title: "Attack User", innerHTML: "⚔️" }
-	);
-	attackButton.onmouseover = () => (attackButton.style.backgroundColor = "#d64537");
-	attackButton.onmouseout = () => (attackButton.style.backgroundColor = "#c0392b");
-
-	actionsContainer.append(profileButton, attackButton);
 	memberDiv.append(memberInfoContainer, actionsContainer);
 	return memberDiv;
 }
@@ -722,8 +586,7 @@ function createCategoryElement(categoryName, membersInCategory, factionID) {
 		gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))",
 		gap: "8px",
 	});
-
-	const storageKey = `${CATEGORY_STATE_PREFIX}${factionID}_${categoryName.replace(/\s+/g, "_")}`;
+	const storageKey = `${STATE_PREFIX}${factionID}_${categoryName.replace(/\s+/g, "_")}`;
 	const isCollapsedStored = localStorage.getItem(storageKey) === "true";
 	memberListDiv.style.display = isCollapsedStored ? "none" : "grid";
 
@@ -742,25 +605,22 @@ function createCategoryElement(categoryName, membersInCategory, factionID) {
 	});
 	const updateHeaderContent = (isCollapsed) => (categoryHeader.innerHTML = `${categoryName} <span>(${membersInCategory.length}) ${isCollapsed ? "▼" : "▲"}</span>`);
 	updateHeaderContent(isCollapsedStored);
-
 	categoryHeader.addEventListener("click", () => {
-		const isCurrentlyCollapsed = memberListDiv.style.display === "none";
-		memberListDiv.style.display = isCurrentlyCollapsed ? "grid" : "none";
-		updateHeaderContent(!isCurrentlyCollapsed);
-		localStorage.setItem(storageKey, JSON.stringify(!isCurrentlyCollapsed));
+		const isNowCollapsed = memberListDiv.style.display === "none";
+		memberListDiv.style.display = isNowCollapsed ? "grid" : "none";
+		updateHeaderContent(!isNowCollapsed);
+		localStorage.setItem(storageKey, JSON.stringify(!isNowCollapsed));
 	});
-
 	membersInCategory.forEach((member) => memberListDiv.appendChild(createMemberElement(member, categoryName)));
 	categoryDiv.append(categoryHeader, memberListDiv);
 	return categoryDiv;
 }
 
 function updateFactionDisplay(memberStatusesToDisplay, factionID) {
-	let displayContainer = document.getElementById(DISPLAY_CONTAINER_ID);
-	let contentWrapper;
+	let displayContainer = document.getElementById(MAIN_CONTAINER_ID);
+	let contentWrapper = document.getElementById(CONTENT_WRAPPER_ID);
 
 	if (!displayContainer) {
-		const isMainCollapsedStored = localStorage.getItem(MAIN_DISPLAY_COLLAPSED_KEY) === "true";
 		displayContainer = createStyledElement(
 			"div",
 			{
@@ -775,79 +635,56 @@ function updateFactionDisplay(memberStatusesToDisplay, factionID) {
 				fontFamily: "Verdana, Arial, sans-serif",
 				maxHeight: "600px",
 				overflowY: "auto",
-				display: isMainCollapsedStored ? "none" : "block",
+				display: localStorage.getItem(COLLAPSED_KEY) === "true" ? "none" : "block",
 			},
-			{ id: DISPLAY_CONTAINER_ID }
+			{ id: MAIN_CONTAINER_ID }
 		);
 		contentWrapper = createStyledElement("div", {}, { id: CONTENT_WRAPPER_ID });
 		displayContainer.appendChild(contentWrapper);
 
-		const targetElement = document.querySelector(FACTION_STATUS_SELECTOR);
+		const targetElement = document.querySelector(FACTION_SELECTOR);
+		const controlsContainer = document.getElementById(FACTION_CONTROLS_CONTAINER_ID);
 		if (targetElement) {
-			const controlsContainer = document.getElementById(FACTION_CONTROLS_CONTAINER_ID);
 			if (controlsContainer?.parentNode === targetElement && controlsContainer.nextSibling) targetElement.insertBefore(displayContainer, controlsContainer.nextSibling);
-			else if (controlsContainer?.parentNode === targetElement) targetElement.appendChild(displayContainer);
-			else targetElement.insertBefore(displayContainer, targetElement.firstChild);
+			else targetElement.insertBefore(displayContainer, controlsContainer ? controlsContainer.nextSibling : targetElement.firstChild);
 		}
 	} else {
-		contentWrapper = document.getElementById(CONTENT_WRAPPER_ID);
 		contentWrapper.innerHTML = "";
 	}
 
 	if (!isApiKeySet()) {
-		contentWrapper.innerHTML =
-			'<p style="color: #ffcc00; text-align: center; padding: 20px;">Please set your Torn API Key using the button above to view faction member statuses.</p>';
+		contentWrapper.innerHTML = '<p style="color: #ffcc00; text-align: center; padding: 20px;">Please set your Torn API Key to view statuses.</p>';
 		return;
 	}
 
 	const currentMemberIDsInDisplay = new Set(memberStatusesToDisplay.map((m) => m.userID));
-	activeCountdownIntervals.forEach((countdownData, userIdString) => {
-		const userId = userIdString;
+	countdowns.forEach((countdownData, userId) => {
 		const memberInNewData = memberStatusesToDisplay.find((m) => m.userID === userId);
-		let shouldClear = true;
-		if (memberInNewData) {
-			const duration = memberInNewData.durationSeconds ?? parseTimeToSeconds(memberInNewData.description);
-			const isEligibleForCountdown =
-				duration < 60 &&
-				duration !== Infinity &&
-				duration > 0 &&
-				(memberInNewData.status.includes("Hospital") || memberInNewData.status.includes("Jail") || memberInNewData.status.includes("Traveling"));
-			if (isEligibleForCountdown) shouldClear = false;
-		}
-		if (shouldClear || !currentMemberIDsInDisplay.has(userId)) {
+		const duration = memberInNewData?.durationSeconds ?? parseTimeToSeconds(memberInNewData?.description);
+		const isEligible = duration < 60 && duration !== Infinity && duration > 0 && memberInNewData?.status?.match(/Hospital|Jail|Traveling/);
+		if (!isEligible || !currentMemberIDsInDisplay.has(userId)) {
 			clearInterval(countdownData.intervalId);
-			activeCountdownIntervals.delete(userId);
+			countdowns.delete(userId);
 		}
 	});
 
 	const categorizedMembers = Object.fromEntries(CATEGORY_ORDER.map((cat) => [cat, []]));
 	memberStatusesToDisplay.forEach((member) => {
-		member.durationSeconds = member.durationSeconds ?? parseTimeToSeconds(member.description);
+		member.durationSeconds ??= parseTimeToSeconds(member.description);
 		const { status, description } = member;
-		const descLower = description.toLowerCase();
-		if (status === "Hospital") {
-			if (descLower.includes(" hospital in ") || (descLower.includes("in a ") && descLower.includes(" hospital")))
-				categorizedMembers[STATUS_CATEGORIES.HOSPITAL_ABROAD].push(member);
-			else categorizedMembers[STATUS_CATEGORIES.HOSPITAL_TORN].push(member);
-		} else if (status === "Traveling") categorizedMembers[STATUS_CATEGORIES.TRAVELING].push(member);
-		else if (status === "Abroad") categorizedMembers[STATUS_CATEGORIES.OKAY_ABROAD].push(member);
-		else if (status.includes("Jail")) categorizedMembers[STATUS_CATEGORIES.JAIL].push(member);
-		else if (status === "Okay") categorizedMembers[STATUS_CATEGORIES.OKAY].push(member);
-		else categorizedMembers[STATUS_CATEGORIES.OTHER].push(member);
+		let category = STATUS_CATEGORIES.OTHER;
+		if (status === "Hospital") category = description.toLowerCase().match(/hospital in|in a .* hospital/) ? STATUS_CATEGORIES.HOSPITAL_ABROAD : STATUS_CATEGORIES.HOSPITAL_TORN;
+		else if (status === "Traveling") category = STATUS_CATEGORIES.TRAVELING;
+		else if (status === "Abroad") category = STATUS_CATEGORIES.OKAY_ABROAD;
+		else if (status.includes("Jail")) category = STATUS_CATEGORIES.JAIL;
+		else if (status === "Okay") category = STATUS_CATEGORIES.OKAY;
+		categorizedMembers[category].push(member);
 	});
 
 	CATEGORY_ORDER.forEach((categoryName) => {
 		const membersInCategory = categorizedMembers[categoryName];
 		if (membersInCategory.length === 0) return;
-		membersInCategory.sort((a, b) => {
-			const durA = a.durationSeconds;
-			const durB = b.durationSeconds;
-			if (durA !== Infinity && durB !== Infinity) {
-				if (durA !== durB) return durA - durB;
-			} else if (durA !== Infinity) return -1;
-			else if (durB !== Infinity) return 1;
-			return a.name.localeCompare(b.name);
-		});
+		membersInCategory.sort((a, b) => a.durationSeconds - b.durationSeconds || a.name.localeCompare(b.name));
 		contentWrapper.appendChild(createCategoryElement(categoryName, membersInCategory, factionID));
 	});
 }
@@ -858,122 +695,91 @@ async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox) {
 		return;
 	}
 
-	const usersOkayInPreviousCycle = new Set(previouslyOkayFactionUserIDs);
-	previouslyOkayFactionUserIDs.clear();
+	const usersOkayInPreviousCycle = new Set(previouslyOkayIDs);
+	previouslyOkayIDs.clear();
 	document.getElementById("yata-api-error-message")?.remove();
 	document.getElementById("ffscouter-api-error-message")?.remove();
 
-	const tornFactionData = await fetchApi(`faction/${factionID}`);
+	const [tornFactionData, yataFullResponse] = await Promise.all([fetchApi(`faction/${factionID}`), fetchYataSpies(factionID)]);
+	currentYataSpies = yataFullResponse?.spies || {};
+
 	if (tornFactionData?.error || !tornFactionData?.members) {
-		console.error("Error fetching or processing faction data:", tornFactionData?.error?.error || "No member data");
-		const contentWrapper = document.getElementById(CONTENT_WRAPPER_ID);
-		if (contentWrapper) {
-			contentWrapper.innerHTML = `<p style="color: #ff6666; text-align: center; padding: 10px;">Error fetching faction data: ${
-				tornFactionData?.error?.error || "No member data"
-			}. Check API key and network.</p>`;
-		}
+		console.error("Error fetching faction data:", tornFactionData?.error?.error || "No member data");
+		const cw = document.getElementById(CONTENT_WRAPPER_ID);
+		if (cw) cw.innerHTML = `<p style="color: #ff6666; text-align: center; padding: 10px;">Error fetching faction data: ${tornFactionData?.error?.error || "No member data"}.</p>`;
 		return;
 	}
 	const memberIDs = Object.keys(tornFactionData.members);
+	currentFFScouterSpies = (await fetchFFScouterSpies(factionID, memberIDs)) || {};
 
-	const yataFullResponse = await fetchYataSpies(factionID);
-	currentYataSpies = yataFullResponse?.spies || {};
-
-	const ffScouterFullResponse = await fetchFFScouterSpies(factionID, memberIDs);
-	currentFFScouterSpies = ffScouterFullResponse || {};
-
-	currentDisplayableMemberStatuses = Object.entries(tornFactionData.members).map(([userID, memberData]) => ({
+	currentStatuses = Object.entries(tornFactionData.members).map(([userID, m]) => ({
 		userID,
-		name: memberData.name,
-		status: memberData.status.state,
-		description: memberData.status.description,
-		durationSeconds: parseTimeToSeconds(memberData.status.description),
-		lastActionStatus: memberData.last_action?.status || "Offline",
+		name: m.name,
+		status: m.status.state,
+		description: m.status.description,
+		durationSeconds: parseTimeToSeconds(m.status.description),
+		lastActionStatus: m.last_action?.status || "Offline",
 		yataSpyData: currentYataSpies[userID] || null,
 		ffscouterSpyData: currentFFScouterSpies[userID] || null,
 	}));
 
 	let newlyOkayPlayerDetected = false;
-	currentDisplayableMemberStatuses.forEach((member) => {
+	currentStatuses.forEach((member) => {
 		if (member.status === "Okay") {
-			previouslyOkayFactionUserIDs.add(member.userID);
+			previouslyOkayIDs.add(member.userID);
 			if (!usersOkayInPreviousCycle.has(member.userID)) newlyOkayPlayerDetected = true;
 		}
 	});
-
 	if (stakeoutCheckbox?.checked && newlyOkayPlayerDetected) playAlertSound();
-	updateFactionDisplay(currentDisplayableMemberStatuses, factionID);
+	updateFactionDisplay(currentStatuses, factionID);
 }
 
 function closeSpiesModal() {
-	const overlay = document.getElementById(SPIES_MODAL_OVERLAY_ID);
-	if (overlay) {
-		overlay.remove();
-	}
-	if (spiesModalEscapeKeyListener) {
-		document.removeEventListener("keydown", spiesModalEscapeKeyListener);
-		spiesModalEscapeKeyListener = null;
+	document.getElementById(MODAL_OVERLAY_ID)?.remove();
+	if (modalEscapeKeyListener) {
+		document.removeEventListener("keydown", modalEscapeKeyListener);
+		modalEscapeKeyListener = null;
 	}
 }
 
 async function saveSpyApiKeys() {
 	const currentFactionID = new URLSearchParams(window.location.search).get("ID");
+	const processKey = async (inputId, storageKey, storeName, errorMsgId) => {
+		const input = document.getElementById(inputId);
+		const oldKey = localStorage.getItem(storageKey);
+		const newKey = input.value.trim();
 
-	const yataKeyInput = document.getElementById(YATA_API_KEY_INPUT_ID);
-	const tsKeyInput = document.getElementById(TORNSTATS_API_KEY_INPUT_ID); // not used
-	const ffscouterKeyInput = document.getElementById(FFSCOUTER_API_KEY_INPUT_ID);
+		if (newKey) localStorage.setItem(storageKey, newKey);
+		else localStorage.removeItem(storageKey);
 
-	const oldYataKey = localStorage.getItem(YATA_API_KEY_STORAGE_KEY);
-	const newYataKey = yataKeyInput.value.trim();
-	if (newYataKey) localStorage.setItem(YATA_API_KEY_STORAGE_KEY, newYataKey);
-	else localStorage.removeItem(YATA_API_KEY_STORAGE_KEY);
-	if (newYataKey !== oldYataKey && currentFactionID) {
-		await clearSpyDataForFactionFromDB(currentFactionID, YATA_SPIES_STORE_NAME);
-		document.getElementById("yata-api-error-message")?.remove();
-	}
-
-	const oldFFScouterKey = localStorage.getItem(FFSCOUTER_API_KEY_STORAGE_KEY);
-	const newFFScouterKey = ffscouterKeyInput.value.trim();
-	if (newFFScouterKey) localStorage.setItem(FFSCOUTER_API_KEY_STORAGE_KEY, newFFScouterKey);
-	else localStorage.removeItem(FFSCOUTER_API_KEY_STORAGE_KEY);
-	if (newFFScouterKey !== oldFFScouterKey && currentFactionID) {
-		await clearSpyDataForFactionFromDB(currentFactionID, FFSCOUTER_SPIES_STORE_NAME);
-		document.getElementById("ffscouter-api-error-message")?.remove();
-	}
-
-	if (tsKeyInput.value.trim()) localStorage.setItem(TORNSTATS_API_KEY_STORAGE_KEY, tsKeyInput.value.trim());
-	else localStorage.removeItem(TORNSTATS_API_KEY_STORAGE_KEY); // not used
+		if (newKey !== oldKey && currentFactionID) {
+			await clearSpyDataForFactionFromDB(currentFactionID, storeName);
+			document.getElementById(errorMsgId)?.remove();
+		}
+	};
+	await processKey(YATA_API_ID, YATA_KEY, YATA_SPIES_STORE_NAME, "yata-api-error-message");
+	await processKey(FFSCOUTER_API_ID, FFSCOUTER_KEY, FFSCOUTER_SPIES_STORE_NAME, "ffscouter-api-error-message");
 
 	closeSpiesModal();
-
 	const stakeoutCheckbox = document.getElementById("factionStakeoutCheckbox");
 	if (currentFactionID && stakeoutCheckbox) fetchMonitorAndUpdate(currentFactionID, stakeoutCheckbox);
 }
 
-async function clearSpyDataForFactionFromDB(factionID, storeName) {
-	try {
-		const db = await openDB();
-		return new Promise((resolve, reject) => {
-			const transaction = db.transaction([storeName], "readwrite");
-			const store = transaction.objectStore(storeName);
-			const request = store.delete(factionID);
-			request.onsuccess = () => resolve();
-			request.onerror = (event) => {
-				console.error(`Error deleting spy data for faction from DB (Store: ${storeName}):`, event.target.errorCode);
-				reject(event.target.errorCode);
-			};
-		});
-	} catch (error) {
-		console.error(`Failed to open DB for clearSpyDataForFaction (Store: ${storeName}):`, error);
-	}
+function createModalInputCard(titleText, inputId, inputValue, placeholder, cardStyles, titleStyles) {
+	const card = createStyledElement("div", { backgroundColor: "#3a3a3a", padding: "15px", borderRadius: "6px", ...cardStyles });
+	const title = createStyledElement("h3", { margin: "0 0 10px 0", ...titleStyles }, { textContent: titleText });
+	const input = createStyledElement(
+		"input",
+		{ width: "calc(100% - 16px)", padding: "8px", borderRadius: "3px", border: "1px solid #555", backgroundColor: "#222", color: "#f0f0f0", fontSize: "0.9em" },
+		{ type: "text", id: inputId, value: inputValue || "", placeholder }
+	);
+	card.append(title, input);
+	return card;
 }
 
 function openSpiesModal() {
-	if (document.getElementById(SPIES_MODAL_ID)) return;
-	if (spiesModalEscapeKeyListener) {
-		document.removeEventListener("keydown", spiesModalEscapeKeyListener);
-		spiesModalEscapeKeyListener = null;
-	}
+	if (document.getElementById(MODAL_ID)) return;
+	closeSpiesModal();
 
 	const overlay = createStyledElement(
 		"div",
@@ -989,7 +795,7 @@ function openSpiesModal() {
 			alignItems: "center",
 			justifyContent: "center",
 		},
-		{ id: SPIES_MODAL_OVERLAY_ID }
+		{ id: MODAL_OVERLAY_ID }
 	);
 	const modal = createStyledElement(
 		"div",
@@ -1004,137 +810,81 @@ function openSpiesModal() {
 			boxShadow: "0 5px 15px rgba(0,0,0,0.5)",
 			fontFamily: "Verdana, Arial, sans-serif",
 		},
-		{ id: SPIES_MODAL_ID }
+		{ id: MODAL_ID }
 	);
-	const title = createStyledElement(
-		"h2",
-		{
-			margin: "0 0 15px 0",
-			color: "#76D7C4",
-			textAlign: "center",
-			borderBottom: "1px solid #444",
-			paddingBottom: "10px",
-		},
-		{ textContent: "Configure Spy Data Sources" }
+
+	modal.append(
+		createStyledElement(
+			"h2",
+			{ margin: "0 0 15px 0", color: "#76D7C4", textAlign: "center", borderBottom: "1px solid #444", paddingBottom: "10px" },
+			{ textContent: "Configure Spy Data Sources" }
+		),
+		createStyledElement(
+			"p",
+			{ fontSize: "0.9em", color: "#ccc", marginBottom: "20px", lineHeight: "1.5", textAlign: "center" },
+			{ innerHTML: "Enter API key(s) for external spy services.<br>These are service-specific keys, not your Torn API key." }
+		)
 	);
-	const description = createStyledElement(
-		"p",
-		{
-			fontSize: "0.9em",
-			color: "#ccc",
-			marginBottom: "20px",
-			lineHeight: "1.5",
-		},
-		{ innerHTML: "Enter your API key(s) for external services to fetch spy data. <br>Make sure these are the API key(s) specific to those services." }
-	);
+
 	const cardsContainer = createStyledElement("div", { display: "flex", flexDirection: "column", gap: "15px", marginBottom: "25px" });
-
-	// YATA Card
-	const yataCard = createStyledElement("div", { backgroundColor: "#3a3a3a", padding: "15px", borderRadius: "6px", borderLeft: "4px solid #2980B9" });
-	const yataTitle = createStyledElement("h3", { margin: "0 0 10px 0", color: "#AED6F1" }, { textContent: "YATA" });
-	const yataInput = createStyledElement(
-		"input",
-		{
-			width: "calc(100% - 12px)",
-			padding: "8px",
-			borderRadius: "3px",
-			border: "1px solid #555",
-			backgroundColor: "#222",
-			color: "#f0f0f0",
-			fontSize: "0.9em",
-		},
-		{ type: "text", id: YATA_API_KEY_INPUT_ID, value: localStorage.getItem(YATA_API_KEY_STORAGE_KEY) || "", placeholder: "Enter your YATA API Key" }
+	cardsContainer.append(
+		createModalInputCard(
+			"YATA",
+			YATA_API_ID,
+			localStorage.getItem(YATA_KEY),
+			"Enter YATA API Key",
+			{ borderLeft: "4px solid #2980B9" },
+			{ color: "#AED6F1" }
+		),
+		createModalInputCard(
+			"FFScouter",
+			FFSCOUTER_API_ID,
+			localStorage.getItem(FFSCOUTER_KEY),
+			"Enter FFScouter API Key",
+			{ borderLeft: "4px solid #3498DB" },
+			{ color: "#85C1E9" }
+		)
 	);
-	yataCard.append(yataTitle, yataInput);
-
-	// FFScouter Card
-	const ffscouterCard = createStyledElement("div", { backgroundColor: "#3a3a3a", padding: "15px", borderRadius: "6px", borderLeft: "4px solid #3498DB" });
-	const ffscouterTitle = createStyledElement("h3", { margin: "0 0 10px 0", color: "#85C1E9" }, { textContent: "FFScouter" });
-	const ffscouterInput = createStyledElement(
-		"input",
-		{
-			width: "calc(100% - 12px)",
-			padding: "8px",
-			borderRadius: "3px",
-			border: "1px solid #555",
-			backgroundColor: "#222",
-			color: "#f0f0f0",
-			fontSize: "0.9em",
-		},
-		{ type: "text", id: FFSCOUTER_API_KEY_INPUT_ID, value: localStorage.getItem(FFSCOUTER_API_KEY_STORAGE_KEY) || "", placeholder: "Enter your FFScouter API Key" }
-	);
-	ffscouterCard.append(ffscouterTitle, ffscouterInput);
-
-	// TornStats Card (not used)
-	const tsCard = createStyledElement("div", { backgroundColor: "#3a3a3a", padding: "15px", borderRadius: "6px", borderLeft: "4px solid #AF7AC5" });
-	const tsTitle = createStyledElement("h3", { margin: "0 0 10px 0", color: "#D7BDE2" }, { textContent: "TornStats - Not built yet" });
-	const tsInput = createStyledElement(
-		"input",
-		{
-			width: "calc(100% - 12px)",
-			padding: "8px",
-			borderRadius: "3px",
-			border: "1px solid #555",
-			backgroundColor: "#222",
-			color: "#f0f0f0",
-			fontSize: "0.9em",
-		},
-		{ type: "text", id: TORNSTATS_API_KEY_INPUT_ID, value: localStorage.getItem(TORNSTATS_API_KEY_STORAGE_KEY) || "", placeholder: "Not built yet" }
-	);
-	tsCard.append(tsTitle, tsInput);
-
-	cardsContainer.append(yataCard, ffscouterCard, tsCard);
+	modal.appendChild(cardsContainer);
 
 	const actionsContainer = createStyledElement("div", { display: "flex", justifyContent: "flex-end", gap: "10px" });
 	const saveButton = createStyledElement(
 		"button",
-		{
-			padding: "8px 15px",
-			backgroundColor: "#4CAF50",
-			color: "white",
-			border: "none",
-			borderRadius: "4px",
-			cursor: "pointer",
-			fontSize: "0.95em",
-		},
+		{ padding: "8px 15px", backgroundColor: "#4CAF50", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "0.95em" },
 		{ textContent: "Save & Close" }
 	);
-	saveButton.onmouseover = () => (saveButton.style.backgroundColor = "#45a049");
-	saveButton.onmouseout = () => (saveButton.style.backgroundColor = "#4CAF50");
 	saveButton.addEventListener("click", saveSpyApiKeys);
 
 	const closeButton = createStyledElement(
 		"button",
-		{
-			padding: "8px 15px",
-			backgroundColor: "#777",
-			color: "white",
-			border: "none",
-			borderRadius: "4px",
-			cursor: "pointer",
-			fontSize: "0.95em",
-		},
+		{ padding: "8px 15px", backgroundColor: "#777", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "0.95em" },
 		{ textContent: "Cancel" }
 	);
-	closeButton.onmouseover = () => (closeButton.style.backgroundColor = "#888");
-	closeButton.onmouseout = () => (closeButton.style.backgroundColor = "#777");
 	closeButton.addEventListener("click", closeSpiesModal);
 
 	actionsContainer.append(closeButton, saveButton);
-	modal.append(title, description, cardsContainer, actionsContainer);
+	modal.appendChild(actionsContainer);
 	overlay.appendChild(modal);
 	document.body.appendChild(overlay);
 
 	overlay.addEventListener("click", (e) => {
 		if (e.target === overlay) closeSpiesModal();
 	});
-
-	spiesModalEscapeKeyListener = (e) => {
-		if (e.key === "Escape") {
-			closeSpiesModal();
-		}
+	modalEscapeKeyListener = (e) => {
+		if (e.key === "Escape") closeSpiesModal();
 	};
-	document.addEventListener("keydown", spiesModalEscapeKeyListener);
+	document.addEventListener("keydown", modalEscapeKeyListener);
+}
+
+function createFactionControlButton(text, onClick, id = null, additionalStyles = {}) {
+	const button = createStyledElement(
+		"button",
+		{ padding: "4px 8px", backgroundColor: "#555", color: "white", border: "1px solid #666", borderRadius: "3px", cursor: "pointer", marginLeft: "10px", ...additionalStyles },
+		{ textContent: text }
+	);
+	if (id) button.id = id;
+	button.addEventListener("click", onClick);
+	return button;
 }
 
 function addFactionStakeoutElements(factionPageElement, factionID) {
@@ -1156,6 +906,7 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		},
 		{ id: FACTION_CONTROLS_CONTAINER_ID }
 	);
+
 	const monitorControls = createStyledElement("div", { display: "flex", alignItems: "center" });
 	const stakeoutCheckbox = createStyledElement("input", { marginRight: "5px", cursor: "pointer" }, { type: "checkbox", id: "factionStakeoutCheckbox" });
 	const intervalDropdown = createStyledElement(
@@ -1163,87 +914,70 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		{ marginRight: "5px", backgroundColor: "#444", color: "white", border: "1px solid #666", padding: "3px" },
 		{ id: "factionStakeoutInterval" }
 	);
-	[30, 60].forEach((val) => intervalDropdown.add(createStyledElement("option", { backgroundColor: "#222", color: "white" }, { value: val, text: val.toString() })));
+
+	[30, 60].forEach((val) => intervalDropdown.add(new Option(val.toString(), val.toString())));
 	intervalDropdown.value = "30";
 	monitorControls.append(
 		stakeoutCheckbox,
-		createStyledElement("label", { marginRight: "5px", cursor: "pointer" }, { htmlFor: "factionStakeoutCheckbox", textContent: "Monitor faction every" }),
+		createStyledElement("label", { marginRight: "5px", cursor: "pointer" }, { htmlFor: "factionStakeoutCheckbox", textContent: "Monitor every" }),
 		intervalDropdown,
 		createStyledElement("label", { cursor: "pointer" }, { htmlFor: "factionStakeoutInterval", textContent: "seconds" })
 	);
-	const apiKeyControls = createStyledElement("div", { display: "flex", alignItems: "center" });
-	const apiKeyButton = createStyledElement(
-		"button",
-		{ padding: "4px 8px", backgroundColor: "#555", color: "white", border: "1px solid #666", borderRadius: "3px", cursor: "pointer", marginLeft: "10px" },
-		{ id: "stakeoutApiKeyButton" }
+
+	const apiKeyButton = createFactionControlButton(
+		isApiKeySet() ? "Change Torn API Key" : "Set Torn API Key",
+		() => {
+			const newKey = prompt("Please enter your Torn API key:", isApiKeySet() ? currentApiKey : "");
+			if (newKey !== null) {
+				currentApiKey = newKey.trim() || API_KEY_PLACEHOLDER;
+				localStorage.setItem("stakeoutUserApiKey", currentApiKey === API_KEY_PLACEHOLDER ? "" : currentApiKey);
+				if (currentApiKey === API_KEY_PLACEHOLDER) localStorage.removeItem("stakeoutUserApiKey");
+				previouslyOkayIDs.clear();
+				apiKeyButton.textContent = isApiKeySet() ? "Change Torn API Key" : "Set Torn API Key";
+				fetchMonitorAndUpdate(factionID, stakeoutCheckbox);
+			}
+		},
+		"stakeoutApiKeyButton"
 	);
-	const updateButtonText = () => (apiKeyButton.textContent = isApiKeySet() ? "Change Torn API Key" : "Set Torn API Key");
-	updateButtonText();
-	apiKeyButton.addEventListener("click", () => {
-		const newKey = prompt("Please enter your Torn API key:", isApiKeySet() ? currentApiKey : "");
-		if (newKey !== null) {
-			currentApiKey = newKey.trim() || API_KEY_PLACEHOLDER;
-			if (currentApiKey === API_KEY_PLACEHOLDER) localStorage.removeItem("stakeoutUserApiKey");
-			else localStorage.setItem("stakeoutUserApiKey", currentApiKey);
-			previouslyOkayFactionUserIDs.clear();
-			updateButtonText();
-			fetchMonitorAndUpdate(factionID, stakeoutCheckbox);
-		}
-	});
-	apiKeyControls.appendChild(apiKeyButton);
-	const displayToggleControls = createStyledElement("div", { display: "flex", alignItems: "center" });
-	const isInitiallyCollapsed = localStorage.getItem(MAIN_DISPLAY_COLLAPSED_KEY) === "true";
-	const toggleDisplayButton = createStyledElement(
-		"button",
-		{ padding: "4px 8px", backgroundColor: "#555", color: "white", border: "1px solid #666", borderRadius: "3px", cursor: "pointer", marginLeft: "10px" },
-		{ textContent: isInitiallyCollapsed ? TEXT_SHOW_LIST : TEXT_HIDE_LIST }
-	);
-	toggleDisplayButton.addEventListener("click", () => {
-		const displayDiv = document.getElementById(DISPLAY_CONTAINER_ID);
+
+	const toggleDisplayButton = createFactionControlButton(localStorage.getItem(COLLAPSED_KEY) === "true" ? "Show Member List" : "Hide Member List", () => {
+		const displayDiv = document.getElementById(MAIN_CONTAINER_ID);
 		if (displayDiv) {
-			const isCurrentlyHidden = displayDiv.style.display === "none";
-			displayDiv.style.display = isCurrentlyHidden ? "block" : "none";
-			toggleDisplayButton.textContent = isCurrentlyHidden ? TEXT_HIDE_LIST : TEXT_SHOW_LIST;
-			localStorage.setItem(MAIN_DISPLAY_COLLAPSED_KEY, JSON.stringify(!isCurrentlyHidden));
+			const isHidden = displayDiv.style.display === "none";
+			displayDiv.style.display = isHidden ? "block" : "none";
+			toggleDisplayButton.textContent = isHidden ? "Hide Member List" : "Show Member List";
+			localStorage.setItem(COLLAPSED_KEY, JSON.stringify(!isHidden));
 		}
 	});
-	displayToggleControls.appendChild(toggleDisplayButton);
-	const spiesControls = createStyledElement("div", { display: "flex", alignItems: "center" });
-	const spiesButton = createStyledElement(
-		"button",
-		{ padding: "4px 8px", backgroundColor: "rgb(66 71 207)", color: "white", border: "1px solid rgb(66 71 207)", borderRadius: "3px", cursor: "pointer", marginLeft: "10px" },
-		{ textContent: "Spies Config" }
-	);
-	spiesButton.onmouseover = () => (spiesButton.style.backgroundColor = "#2E86C1");
-	spiesButton.onmouseout = () => (spiesButton.style.backgroundColor = "rgb(66 71 207)");
-	spiesButton.addEventListener("click", openSpiesModal);
-	spiesControls.appendChild(spiesButton);
-	controlsContainer.append(monitorControls, apiKeyControls, displayToggleControls, spiesControls);
-	const startMonitoring = (intervalSeconds) => {
+
+	const spiesButton = createFactionControlButton("Spies Config", openSpiesModal, null, { backgroundColor: "rgb(66 71 207)", border: "1px solid rgb(66 71 207)" });
+	controlsContainer.append(monitorControls, apiKeyButton, toggleDisplayButton, spiesButton);
+
+	const startMonitoring = (interval) => {
 		if (monitorIntervalId) clearInterval(monitorIntervalId);
 		clearAllIndividualMonitors();
 		clearAllCountdownIntervals();
 		fetchMonitorAndUpdate(factionID, stakeoutCheckbox);
-		monitorIntervalId = setInterval(() => fetchMonitorAndUpdate(factionID, stakeoutCheckbox), intervalSeconds * 1000);
+		monitorIntervalId = setInterval(() => fetchMonitorAndUpdate(factionID, stakeoutCheckbox), interval * 1000);
 	};
+
 	const stopMonitoring = () => {
 		if (monitorIntervalId) clearInterval(monitorIntervalId);
 		monitorIntervalId = null;
 		clearAllIndividualMonitors();
 		clearAllCountdownIntervals();
-		previouslyOkayFactionUserIDs.clear();
+		previouslyOkayIDs.clear();
 		currentYataSpies = {};
 		currentFFScouterSpies = {};
 		document.getElementById("yata-api-error-message")?.remove();
 		document.getElementById("ffscouter-api-error-message")?.remove();
 	};
-	stakeoutCheckbox.addEventListener("change", () => {
-		if (stakeoutCheckbox.checked) startMonitoring(parseInt(intervalDropdown.value));
-		else stopMonitoring();
-	});
+
+	stakeoutCheckbox.addEventListener("change", () => (stakeoutCheckbox.checked ? startMonitoring(parseInt(intervalDropdown.value)) : stopMonitoring()));
 	intervalDropdown.addEventListener("change", () => {
 		if (stakeoutCheckbox.checked) startMonitoring(parseInt(intervalDropdown.value));
 	});
+
 	factionPageElement.insertBefore(controlsContainer, factionPageElement.firstChild);
 }
 
@@ -1252,54 +986,56 @@ function initialFactionLoad(factionID) {
 }
 
 function addStakeoutElementsToProfiles(statusElement) {
-	let intervalId = null;
-	let profileUserWasOkay = false;
+	let intervalId = null,
+		profileUserWasOkay = false;
+
 	const stakeoutContainer = createStyledElement("div", { float: "right", paddingRight: "10px", display: "flex", alignItems: "center" });
 	const stakeoutCheckbox = createStyledElement("input", { marginRight: "5px", cursor: "pointer" }, { type: "checkbox", id: "stakeoutCheckbox" });
 	const intervalDropdown = createStyledElement("select", { marginRight: "5px" }, { id: "stakeoutInterval" });
-	[1, 2, 3, 4, 5, 30, 60].forEach((val) => intervalDropdown.add(createStyledElement("option", {}, { value: val, text: val.toString() })));
+
+	[1, 2, 3, 4, 5, 30, 60].forEach((val) => intervalDropdown.add(new Option(val.toString(), val.toString())));
 	stakeoutContainer.append(
 		stakeoutCheckbox,
 		createStyledElement("label", { marginRight: "5px", cursor: "pointer" }, { htmlFor: "stakeoutCheckbox", textContent: "Check status every" }),
 		intervalDropdown,
 		createStyledElement("label", { cursor: "pointer" }, { htmlFor: "stakeoutInterval", textContent: "seconds" })
 	);
-	const startStakeout = async (intervalSeconds) => {
+
+	const startStakeout = async (interval) => {
 		if (intervalId) clearInterval(intervalId);
 		const userID = new URLSearchParams(window.location.search).get("XID");
 		if (!userID || !isApiKeySet()) {
-			if (!isApiKeySet()) alert("Please set your Torn API key on a faction page first to use profile stakeout.");
+			if (!isApiKeySet()) alert("Set Torn API key on a faction page for profile stakeout.");
 			stakeoutCheckbox.checked = false;
 			return;
 		}
-		const isNowOkay = await checkUserStatus(userID);
-		if (isNowOkay) {
+
+		if (await checkUserStatus(userID)) {
 			if (!profileUserWasOkay) playAlertSound();
 			profileUserWasOkay = true;
 			stakeoutCheckbox.checked = false;
 			return;
 		} else profileUserWasOkay = false;
+
 		intervalId = setInterval(async () => {
-			const isCurrentlyOkay = await checkUserStatus(userID);
-			if (isCurrentlyOkay) {
+			if (await checkUserStatus(userID)) {
 				if (!profileUserWasOkay) playAlertSound();
 				profileUserWasOkay = true;
 				clearInterval(intervalId);
 				intervalId = null;
 				stakeoutCheckbox.checked = false;
 			} else profileUserWasOkay = false;
-		}, intervalSeconds * 1000);
+		}, interval * 1000);
 	};
+
 	const stopStakeout = () => {
-		if (intervalId) clearInterval(intervalId);
-		intervalId = null;
+		if (intervalId) {
+			clearInterval(intervalId);
+			intervalId = null;
+		}
 	};
-	stakeoutCheckbox.addEventListener("change", () => {
-		if (stakeoutCheckbox.checked) {
-			profileUserWasOkay = false;
-			startStakeout(parseInt(intervalDropdown.value));
-		} else stopStakeout();
-	});
+
+	stakeoutCheckbox.addEventListener("change", () => (stakeoutCheckbox.checked ? ((profileUserWasOkay = false), startStakeout(parseInt(intervalDropdown.value))) : stopStakeout()));
 	intervalDropdown.addEventListener("change", () => {
 		if (stakeoutCheckbox.checked) startStakeout(parseInt(intervalDropdown.value));
 	});
@@ -1308,21 +1044,23 @@ function addStakeoutElementsToProfiles(statusElement) {
 
 function observe() {
 	clearOldSpyDataFromDB();
-
 	if (window.StakeOutInterval) clearInterval(window.StakeOutInterval);
+
 	window.StakeOutInterval = setInterval(() => {
-		const profileStatusElement = document.querySelector(PROFILE_STATUS_SELECTOR);
-		if (profileStatusElement && !document.getElementById("stakeoutCheckbox")) addStakeoutElementsToProfiles(profileStatusElement);
-		const factionProfileElement = document.querySelector(FACTION_STATUS_SELECTOR);
-		if (factionProfileElement) {
-			if (!document.getElementById(FACTION_CONTROLS_CONTAINER_ID)) {
-				const factionID = new URLSearchParams(window.location.search).get("ID");
-				if (factionID) {
-					addFactionStakeoutElements(factionProfileElement, factionID);
-					if (!document.getElementById(DISPLAY_CONTAINER_ID)) initialFactionLoad(factionID);
-				}
+		const profileStatusElement = document.querySelector(PROFILE_SELECTOR);
+		if (profileStatusElement && !document.getElementById("stakeoutCheckbox")) {
+			addStakeoutElementsToProfiles(profileStatusElement);
+		}
+
+		const factionProfileElement = document.querySelector(FACTION_SELECTOR);
+		if (factionProfileElement && !document.getElementById(FACTION_CONTROLS_CONTAINER_ID)) {
+			const factionID = new URLSearchParams(window.location.search).get("ID");
+			if (factionID) {
+				addFactionStakeoutElements(factionProfileElement, factionID);
+				if (!document.getElementById(MAIN_CONTAINER_ID)) initialFactionLoad(factionID);
 			}
 		}
+
 		if ((profileStatusElement && document.getElementById("stakeoutCheckbox")) || (factionProfileElement && document.getElementById(FACTION_CONTROLS_CONTAINER_ID)))
 			clearInterval(window.StakeOutInterval);
 	}, 500);
