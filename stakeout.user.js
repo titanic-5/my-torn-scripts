@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    http://tampermonkey.net/
-// @version      2.5.3
+// @version      2.5.4
 // @description  Stakeout factions or individual users
 // @author       Titanic_
 // @match        https://www.torn.com/profiles.php?XID=*
@@ -407,13 +407,7 @@ function createActionButton(icon, title, href, baseColor, hoverColor, additional
 function createMemberElement(member, categoryName) {
 	const isTimedStatus = categoryName.includes("Hospital") || categoryName.includes("Jail") || categoryName.includes("Traveling");
 
-	if (
-		isTimedStatus &&
-		member.durationSeconds < CRITICAL_TIME_THRESHOLD &&
-		member.durationSeconds !== Infinity &&
-		member.durationSeconds > 0 &&
-		!timeouts.has(member.userID)
-	) {
+	if (isTimedStatus && member.durationSeconds < CRITICAL_TIME_THRESHOLD && member.durationSeconds !== Infinity && member.durationSeconds > 0 && !timeouts.has(member.userID)) {
 		const timeoutId = setTimeout(() => checkIndividualUserAndAlert(member.userID), Math.max(1000, member.durationSeconds * 1000));
 		timeouts.set(member.userID, timeoutId);
 	}
@@ -453,8 +447,8 @@ function createMemberElement(member, categoryName) {
 		flexShrink: 0,
 		backgroundColor: member.lastActionStatus === "Online" ? "#4CAF50" : member.lastActionStatus === "Idle" ? "#FF9800" : "#9E9E9E",
 	});
-	const nameContainer = createStyledElement("div", { display: "flex", alignItems: "center", marginBottom: "1px" });
-	nameContainer.append(onlineStatusIcon, createStyledElement("span", { fontWeight: "bold", color: "#E0E0E0" }, { textContent: member.name }));
+	const nameContainer = createStyledElement("div", { display: "flex", alignItems: "center", marginBottom: "1px", maxWidth: "130px", overflow: "hidden" });
+	nameContainer.append(onlineStatusIcon, createStyledElement("span", { fontWeight: "bold", color: "#E0E0E0" }, { textContent: member.name, title: member.name }));
 	const statusDescSpan = createStyledElement(
 		"span",
 		{ color: "#B0B0B0", fontSize: "0.85em", display: "block", marginTop: "2px" },
@@ -828,22 +822,8 @@ function openSpiesModal() {
 
 	const cardsContainer = createStyledElement("div", { display: "flex", flexDirection: "column", gap: "15px", marginBottom: "25px" });
 	cardsContainer.append(
-		createModalInputCard(
-			"YATA",
-			YATA_API_ID,
-			localStorage.getItem(YATA_KEY),
-			"Enter YATA API Key",
-			{ borderLeft: "4px solid #2980B9" },
-			{ color: "#AED6F1" }
-		),
-		createModalInputCard(
-			"FFScouter",
-			FFSCOUTER_API_ID,
-			localStorage.getItem(FFSCOUTER_KEY),
-			"Enter FFScouter API Key",
-			{ borderLeft: "4px solid #3498DB" },
-			{ color: "#85C1E9" }
-		)
+		createModalInputCard("YATA", YATA_API_ID, localStorage.getItem(YATA_KEY), "Enter YATA API Key", { borderLeft: "4px solid #2980B9" }, { color: "#AED6F1" }),
+		createModalInputCard("FFScouter", FFSCOUTER_API_ID, localStorage.getItem(FFSCOUTER_KEY), "Enter FFScouter API Key", { borderLeft: "4px solid #3498DB" }, { color: "#85C1E9" })
 	);
 	modal.appendChild(cardsContainer);
 
