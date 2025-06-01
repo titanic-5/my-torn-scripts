@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    http://tampermonkey.net/
-// @version      2.5.4
+// @version      2.5.5
 // @description  Stakeout factions or individual users
 // @author       Titanic_
 // @match        https://www.torn.com/profiles.php?XID=*
@@ -65,6 +65,7 @@ let currentStatuses = [];
 let previouslyOkayIDs = new Set();
 let currentYataSpies = {};
 let currentFFScouterSpies = {};
+let yataApiKeyChangedGlobal = false;
 let modalEscapeKeyListener = null;
 let dbPromise = null;
 
@@ -256,20 +257,20 @@ function formatStatValue(num) {
 
 function formatSpyTimestamp(unixTimestamp) {
 	if (!unixTimestamp || unixTimestamp === 0) return "Unknown age";
-	const diffSeconds = Math.floor((Date.now() - unixTimestamp * 1000) / 1000);
+	const dS = Math.floor((Date.now() - unixTimestamp * 1000) / 1000);
 
-	if (diffSeconds < 5) return "Just now";
-	const dY = Math.floor(diffSeconds / (365.25 * 86400));
+	if (dS < 5) return "Just now";
+	const dY = Math.floor(dS / (365.25 * 86400));
 	if (dY > 0) return `~${dY}y ago`;
-	const dMo = Math.floor(diffSeconds / (30.44 * 86400));
+	const dMo = Math.floor(dS / (30.44 * 86400));
 	if (dMo > 0) return `~${dMo}mo ago`;
-	const dD = Math.floor(diffSeconds / 86400);
+	const dD = Math.floor(dS / 86400);
 	if (dD > 0) return `~${dD}d ago`;
-	const dH = Math.floor(diffSeconds / 3600);
+	const dH = Math.floor(dS / 3600);
 	if (dH > 0) return `~${dH}h ago`;
-	const dM = Math.floor(diffSeconds / 60);
-	if (dM > 0) return `~${dM}m ago`;
-	return `~${diffSeconds}s ago`;
+	const dMin = Math.floor(dS / 60);
+	if (dMin > 0) return `~${dMin}m ago`;
+	return `~${dS}s ago`;
 }
 
 function createApiErrorDisplay(serviceName, errorMessage, errorId) {
@@ -289,9 +290,7 @@ async function fetchYataSpies(factionID) {
 	if (!yataApiKey) return null;
 
 	const cached = await getSpyDataFromDB(factionID, YATA_SPIES_STORE_NAME);
-	if (cached && isCacheValid(cached) && cached.data?.spies && Object.keys(cached.data.spies).length > 0) {
-		return cached.data;
-	}
+	if (cached && isCacheValid(cached) && cached.data?.spies && Object.keys(cached.data.spies).length > 0) return cached.data;
 
 	const freshData = await fetchApi(`https://yata.yt/api/v1/spies/?faction=${factionID}`, "", yataApiKey);
 	if (freshData && !freshData.error) {
@@ -301,9 +300,8 @@ async function fetchYataSpies(factionID) {
 	if (freshData?.error) {
 		const { error, code } = freshData.error;
 		const msg = error || JSON.stringify(freshData.error);
-		if (code === 2 && (msg.includes("No spies") || msg.includes("faction not found"))) {
-			console.log("YATA: No spies for faction or faction not found:", factionID);
-		} else {
+		if (code === 2 && (msg.includes("No spies") || msg.includes("faction not found"))) console.log("YATA: No spies for faction or faction not found:", factionID);
+		else {
 			console.error("YATA Spies API Error:", msg, code ? `(Code: ${code})` : "");
 			createApiErrorDisplay("YATA", msg, "yata-api-error-message");
 		}
@@ -683,7 +681,7 @@ function updateFactionDisplay(memberStatusesToDisplay, factionID) {
 	});
 }
 
-async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox) {
+async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox, isInitialCall = false) {
 	if (!isApiKeySet()) {
 		updateFactionDisplay([], factionID);
 		return;
@@ -694,8 +692,7 @@ async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox) {
 	document.getElementById("yata-api-error-message")?.remove();
 	document.getElementById("ffscouter-api-error-message")?.remove();
 
-	const [tornFactionData, yataFullResponse] = await Promise.all([fetchApi(`faction/${factionID}`), fetchYataSpies(factionID)]);
-	currentYataSpies = yataFullResponse?.spies || {};
+	const tornFactionData = await fetchApi(`faction/${factionID}`);
 
 	if (tornFactionData?.error || !tornFactionData?.members) {
 		console.error("Error fetching faction data:", tornFactionData?.error?.error || "No member data");
@@ -703,6 +700,13 @@ async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox) {
 		if (cw) cw.innerHTML = `<p style="color: #ff6666; text-align: center; padding: 10px;">Error fetching faction data: ${tornFactionData?.error?.error || "No member data"}.</p>`;
 		return;
 	}
+
+	if (isInitialCall || yataApiKeyChangedGlobal) {
+		const yataFullResponse = await fetchYataSpies(factionID);
+		currentYataSpies = yataFullResponse?.spies || {};
+		if (yataApiKeyChangedGlobal) yataApiKeyChangedGlobal = false;
+	}
+
 	const memberIDs = Object.keys(tornFactionData.members);
 	currentFFScouterSpies = (await fetchFFScouterSpies(factionID, memberIDs)) || {};
 
@@ -738,7 +742,7 @@ function closeSpiesModal() {
 
 async function saveSpyApiKeys() {
 	const currentFactionID = new URLSearchParams(window.location.search).get("ID");
-	const processKey = async (inputId, storageKey, storeName, errorMsgId) => {
+	const processKey = async (inputId, storageKey, storeName, errorMsgId, changeCallback) => {
 		const input = document.getElementById(inputId);
 		const oldKey = localStorage.getItem(storageKey);
 		const newKey = input.value.trim();
@@ -746,20 +750,26 @@ async function saveSpyApiKeys() {
 		if (newKey) localStorage.setItem(storageKey, newKey);
 		else localStorage.removeItem(storageKey);
 
-		if (newKey !== oldKey && currentFactionID) {
-			await clearSpyDataForFactionFromDB(currentFactionID, storeName);
-			document.getElementById(errorMsgId)?.remove();
+		if (newKey !== oldKey) {
+			if (changeCallback) changeCallback();
+			if (currentFactionID) {
+				await clearSpyDataForFactionFromDB(currentFactionID, storeName);
+				document.getElementById(errorMsgId)?.remove();
+			}
 		}
 	};
-	await processKey(YATA_API_ID, YATA_KEY, YATA_SPIES_STORE_NAME, "yata-api-error-message");
+
+	await processKey(YATA_API_ID, YATA_KEY, YATA_SPIES_STORE_NAME, "yata-api-error-message", () => {
+		yataApiKeyChangedGlobal = true;
+	});
 	await processKey(FFSCOUTER_API_ID, FFSCOUTER_KEY, FFSCOUTER_SPIES_STORE_NAME, "ffscouter-api-error-message");
 
 	closeSpiesModal();
-	const stakeoutCheckbox = document.getElementById("factionStakeoutCheckbox");
-	if (currentFactionID && stakeoutCheckbox) fetchMonitorAndUpdate(currentFactionID, stakeoutCheckbox);
+	const stakeoutCheckboxElement = document.getElementById("factionStakeoutCheckbox");
+	if (currentFactionID) fetchMonitorAndUpdate(currentFactionID, stakeoutCheckboxElement, false);
 }
 
-function createModalInputCard(titleText, inputId, inputValue, placeholder, cardStyles, titleStyles) {
+function createModalInputCard(titleText, inputId, inputValue, placeholder, cardStyles = {}, titleStyles = {}) {
 	const card = createStyledElement("div", { backgroundColor: "#3a3a3a", padding: "15px", borderRadius: "6px", ...cardStyles });
 	const title = createStyledElement("h3", { margin: "0 0 10px 0", ...titleStyles }, { textContent: titleText });
 	const input = createStyledElement(
@@ -947,8 +957,6 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		clearAllIndividualMonitors();
 		clearAllCountdownIntervals();
 		previouslyOkayIDs.clear();
-		currentYataSpies = {};
-		currentFFScouterSpies = {};
 		document.getElementById("yata-api-error-message")?.remove();
 		document.getElementById("ffscouter-api-error-message")?.remove();
 	};
@@ -962,7 +970,8 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 }
 
 function initialFactionLoad(factionID) {
-	fetchMonitorAndUpdate(factionID, { checked: false });
+	yataApiKeyChangedGlobal = false;
+	fetchMonitorAndUpdate(factionID, { checked: false } /* stakeoutCheckbox dummy */, true /* isInitialCall */);
 }
 
 function addStakeoutElementsToProfiles(statusElement) {
@@ -1028,9 +1037,7 @@ function observe() {
 
 	window.StakeOutInterval = setInterval(() => {
 		const profileStatusElement = document.querySelector(PROFILE_SELECTOR);
-		if (profileStatusElement && !document.getElementById("stakeoutCheckbox")) {
-			addStakeoutElementsToProfiles(profileStatusElement);
-		}
+		if (profileStatusElement && !document.getElementById("stakeoutCheckbox")) addStakeoutElementsToProfiles(profileStatusElement);
 
 		const factionProfileElement = document.querySelector(FACTION_SELECTOR);
 		if (factionProfileElement && !document.getElementById(FACTION_CONTROLS_CONTAINER_ID)) {
