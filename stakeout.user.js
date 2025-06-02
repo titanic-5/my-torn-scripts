@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    http://tampermonkey.net/
-// @version      2.5.5
+// @version      2.6.0
 // @description  Stakeout factions or individual users
 // @author       Titanic_
 // @match        https://www.torn.com/profiles.php?XID=*
@@ -54,8 +54,10 @@ const DB_NAME = "StakeoutDB";
 const DB_VERSION = 2;
 const YATA_SPIES_STORE_NAME = "yataFactionSpies";
 const FFSCOUTER_SPIES_STORE_NAME = "ffscouterFactionSpies";
+const TORN_FACTION_API_STORE_NAME = "tornFactionApiCache";
 
-const CACHE_DURATION_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+const TORN_FACTION_API_CACHE_DURATION_MS = 29 * 1000; // 29 seconds
+const SPY_CACHE_DURATION_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 const FFSCOUTER_TARGETS_PER_REQ = 205;
 
 let currentApiKey = localStorage.getItem("stakeoutUserApiKey") || API_KEY_PLACEHOLDER;
@@ -102,9 +104,9 @@ function formatTimeDescription(baseDescription, remainingSeconds) {
 		const m = Math.floor((remainingSeconds % 3600) / 60);
 		const s = remainingSeconds % 60;
 
-		if (d > 0) newTimeValue = `${d}d` + (h > 0 ? ` ${h}h` : "");
+		if (d > 0) newTimeValue = `${d}d` + (h > 0 ? ` ${h}h` : "") + (m > 0 ? ` ${m}m` : "");
 		else if (h > 0) newTimeValue = `${h}h` + (m > 0 ? ` ${m}m` : "");
-		else if (m > 0) newTimeValue = `${m}m` + (s > 0 ? ` ${s}s` : "");
+		else if (m > 0) newTimeValue = `${m}m` + (m < 10 ? (s > 0 ? ` ${s}s` : "") : "");
 		else newTimeValue = `${s}s`;
 	}
 	if (match?.[0]) return baseDescription.replace(match[0], `${match[1]}${newTimeValue}`);
@@ -125,8 +127,8 @@ function clearAllIndividualMonitors() {
 	timeouts.forEach(clearTimeout);
 	timeouts.clear();
 }
-function isCacheValid(cachedItem) {
-	return cachedItem?.timestamp && Date.now() - cachedItem.timestamp < CACHE_DURATION_MS;
+function isCacheValid(cachedItem, duration = SPY_CACHE_DURATION_MS) {
+	return cachedItem?.timestamp && Date.now() - cachedItem.timestamp < duration;
 }
 
 function openDB() {
@@ -134,7 +136,7 @@ function openDB() {
 	dbPromise = new Promise((resolve, reject) => {
 		const request = indexedDB.open(DB_NAME, DB_VERSION);
 		request.onerror = (event) => {
-			console.error("IndexedDB error:", event.target.errorCode);
+			console.error("[Stakeout] IndexedDB error:", event.target.errorCode);
 			reject(event.target.errorCode);
 		};
 		request.onsuccess = (event) => resolve(event.target.result);
@@ -142,6 +144,7 @@ function openDB() {
 			const db = event.target.result;
 			if (!db.objectStoreNames.contains(YATA_SPIES_STORE_NAME)) db.createObjectStore(YATA_SPIES_STORE_NAME, { keyPath: "factionID" });
 			if (!db.objectStoreNames.contains(FFSCOUTER_SPIES_STORE_NAME)) db.createObjectStore(FFSCOUTER_SPIES_STORE_NAME, { keyPath: "factionID" });
+			if (!db.objectStoreNames.contains(TORN_FACTION_API_STORE_NAME)) db.createObjectStore(TORN_FACTION_API_STORE_NAME, { keyPath: "factionID" });
 		};
 	});
 	return dbPromise;
@@ -156,12 +159,12 @@ async function operateOnDB(storeName, mode, operationCallback) {
 			const request = operationCallback(store);
 			request.onsuccess = (event) => resolve(request.result === undefined ? true : request.result);
 			request.onerror = (event) => {
-				console.error(`DB Error (Store: ${storeName}, Mode: ${mode}):`, event.target.errorCode);
+				console.error(`[Stakeout] DB Error (Store: ${storeName}, Mode: ${mode}):`, event.target.errorCode);
 				reject(event.target.errorCode);
 			};
 		});
 	} catch (error) {
-		console.error(`Failed to open DB for ${storeName} operation:`, error);
+		console.error(`[Stakeout] Failed to open DB for ${storeName} operation:`, error);
 		return null;
 	}
 }
@@ -176,6 +179,14 @@ function clearSpyDataForFactionFromDB(factionID, storeName) {
 	return operateOnDB(storeName, "readwrite", (store) => store.delete(factionID));
 }
 
+async function getFactionApiDataFromDB(factionID) {
+	return operateOnDB(TORN_FACTION_API_STORE_NAME, "readonly", (store) => store.get(factionID));
+}
+
+async function saveFactionApiCacheToDB(factionID, data) {
+	return operateOnDB(TORN_FACTION_API_STORE_NAME, "readwrite", (store) => store.put({ factionID, data, timestamp: Date.now() }));
+}
+
 async function clearOldSpyDataFromDB() {
 	for (const storeName of [YATA_SPIES_STORE_NAME, FFSCOUTER_SPIES_STORE_NAME]) {
 		operateOnDB(storeName, "readwrite", (store) => {
@@ -188,13 +199,13 @@ async function clearOldSpyDataFromDB() {
 				}
 			};
 			return cursorRequest;
-		}).catch((error) => console.error(`Error clearing old spy data from ${storeName}:`, error));
+		}).catch((error) => console.error(`[Stakeout] Error clearing old spy data from ${storeName}:`, error));
 	}
 }
 
 async function fetchApi(endpoint, selections = "basic", apiKey = currentApiKey) {
 	return new Promise((resolve) => {
-		const isTornApi = endpoint.startsWith("user/") || endpoint.startsWith("faction/");
+		const isTornApi = endpoint.startsWith("user/") || endpoint.startsWith("faction/") || endpoint.startsWith("v2/faction/");
 		const isFFScouterApi = endpoint.startsWith("https://ffscouter.com/api/v1/get-stats");
 
 		if (isTornApi && (!apiKey || apiKey === API_KEY_PLACEHOLDER)) return resolve({ error: { error: "API Key not set" } });
@@ -204,6 +215,7 @@ async function fetchApi(endpoint, selections = "basic", apiKey = currentApiKey) 
 		let finalUrl = isTornApi ? `https://api.torn.com/${endpoint}?key=${apiKey}&selections=${selections}` : endpoint;
 		if (!isTornApi && !isFFScouterApi && !finalUrl.includes("key=")) finalUrl += `${finalUrl.includes("?") ? "&" : "?"}key=${apiKey}`;
 
+		console.log(`[Stakeout] Fetching API: ${finalUrl}`);
 		GM_xmlhttpRequest({
 			method: "GET",
 			url: finalUrl,
@@ -213,22 +225,22 @@ async function fetchApi(endpoint, selections = "basic", apiKey = currentApiKey) 
 					const data = JSON.parse(response.responseText);
 					if (response.status < 200 || response.status >= 300 || data?.error?.error) {
 						const errorMsg = data?.error?.error || `HTTP Error ${response.status}`;
-						console.error(`API Error (${finalUrl.split("?")[0]}):`, errorMsg, data?.error ? "" : response.responseText);
+						console.error(`[Stakeout] API Error (${finalUrl.split("?")[0]}):`, errorMsg, data?.error ? "" : response.responseText);
 						resolve(data?.error ? { error: data.error } : { error: { error: errorMsg, response: response.responseText } });
 					} else {
 						resolve(data);
 					}
 				} catch (e) {
-					console.error(`Error parsing JSON from ${finalUrl.split("?")[0]}:`, e, response.responseText);
+					console.error(`[Stakeout] Error parsing JSON from ${finalUrl.split("?")[0]}:`, e, response.responseText);
 					resolve({ error: { error: "JSON Parse Error", details: e.message, response: response.responseText } });
 				}
 			},
 			onerror: (response) => {
-				console.error(`Network Error for ${finalUrl.split("?")[0]}:`, response);
+				console.error(`[Stakeout] Network Error for ${finalUrl.split("?")[0]}:`, response);
 				resolve({ error: { error: "Network Error", details: response.statusText || "Unknown network issue" } });
 			},
 			ontimeout: () => {
-				console.error(`Request Timeout for ${finalUrl.split("?")[0]}`);
+				console.error(`[Stakeout] Request Timeout for ${finalUrl.split("?")[0]}`);
 				resolve({ error: { error: "Request Timeout" } });
 			},
 		});
@@ -285,6 +297,22 @@ function createApiErrorDisplay(serviceName, errorMessage, errorId) {
 	}
 }
 
+async function fetchFactionMembersWithCache(factionID) {
+	const cachedItem = await getFactionApiDataFromDB(factionID);
+
+	if (cachedItem && isCacheValid(cachedItem, TORN_FACTION_API_CACHE_DURATION_MS)) {
+		console.log(`[Stakeout] Using cached faction data for ${factionID}`);
+		return cachedItem.data;
+	}
+
+	console.log(`[Stakeout] Fetching fresh Torn faction data for Faction ID: ${factionID}`);
+	const freshData = await fetchApi(`v2/faction/${factionID}/members`, "");
+
+	if (freshData && !freshData.error) await saveFactionApiCacheToDB(factionID, freshData);
+
+	return freshData;
+}
+
 async function fetchYataSpies(factionID) {
 	const yataApiKey = localStorage.getItem(YATA_KEY);
 	if (!yataApiKey) return null;
@@ -300,9 +328,9 @@ async function fetchYataSpies(factionID) {
 	if (freshData?.error) {
 		const { error, code } = freshData.error;
 		const msg = error || JSON.stringify(freshData.error);
-		if (code === 2 && (msg.includes("No spies") || msg.includes("faction not found"))) console.log("YATA: No spies for faction or faction not found:", factionID);
+		if (code === 2 && (msg.includes("No spies") || msg.includes("faction not found"))) console.log("[Stakeout] YATA: No spies for faction or faction not found:", factionID);
 		else {
-			console.error("YATA Spies API Error:", msg, code ? `(Code: ${code})` : "");
+			console.error("[Stakeout] YATA Spies API Error:", msg, code ? `(Code: ${code})` : "");
 			createApiErrorDisplay("YATA", msg, "yata-api-error-message");
 		}
 	}
@@ -324,11 +352,11 @@ async function fetchFFScouterSpies(factionID, memberIDs) {
 
 		if (Array.isArray(responseData)) responseData.forEach((spy) => (allFFScouterData[spy.player_id.toString()] = spy));
 		else if (responseData?.code && responseData?.error) {
-			console.error(`FFScouter API Error (Code ${responseData.code}): ${responseData.error}`);
+			console.error(`[Stakeout] FFScouter API Error (Code ${responseData.code}): ${responseData.error}`);
 			if (responseData.code === 6) createApiErrorDisplay("FFScouter", responseData.error, "ffscouter-api-error-message");
 			if ([1, 2, 6].includes(responseData.code)) return null;
 		} else if (responseData?.error) {
-			console.error("FFScouter Fetch Error:", responseData.error.error || responseData.error);
+			console.error("[Stakeout] FFScouter Fetch Error:", responseData.error.error || responseData.error);
 			return null;
 		}
 	}
@@ -450,13 +478,13 @@ function createMemberElement(member, categoryName) {
 	const statusDescSpan = createStyledElement(
 		"span",
 		{ color: "#B0B0B0", fontSize: "0.85em", display: "block", marginTop: "2px" },
-		{ id: `status-desc-${member.userID}`, textContent: `(${member.description})` }
+		{ id: `status-desc-${member.userID}`, textContent: `(${formatTimeDescription(member.description, member.durationSeconds)})` }
 	);
 	memberInfoContainer.append(nameContainer, statusDescSpan);
 
-	if (isTimedStatus && member.durationSeconds < 60 && member.durationSeconds !== Infinity && member.durationSeconds > 0) {
+	if (isTimedStatus && member.durationSeconds < 600 && member.durationSeconds !== Infinity && member.durationSeconds > 0) {
 		if (countdowns.has(member.userID)) clearInterval(countdowns.get(member.userID).intervalId);
-		const endTime = Date.now() + member.durationSeconds * 1000;
+		const endTime = Date.now() + member.durationSeconds * 1000 - 1000;
 		const intervalId = setInterval(() => {
 			const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
 			const descSpan = document.getElementById(`status-desc-${member.userID}`);
@@ -692,10 +720,10 @@ async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox, isInitialCall 
 	document.getElementById("yata-api-error-message")?.remove();
 	document.getElementById("ffscouter-api-error-message")?.remove();
 
-	const tornFactionData = await fetchApi(`faction/${factionID}`);
+	const tornFactionData = await fetchFactionMembersWithCache(factionID, TORN_FACTION_API_CACHE_DURATION_MS); // fetchApi(`v2/faction/${factionID}/members`, "");
 
 	if (tornFactionData?.error || !tornFactionData?.members) {
-		console.error("Error fetching faction data:", tornFactionData?.error?.error || "No member data");
+		console.error("[Stakeout] Error fetching faction data:", tornFactionData?.error?.error || "No member data");
 		const cw = document.getElementById(CONTENT_WRAPPER_ID);
 		if (cw) cw.innerHTML = `<p style="color: #ff6666; text-align: center; padding: 10px;">Error fetching faction data: ${tornFactionData?.error?.error || "No member data"}.</p>`;
 		return;
@@ -707,18 +735,22 @@ async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox, isInitialCall 
 		if (yataApiKeyChangedGlobal) yataApiKeyChangedGlobal = false;
 	}
 
-	const memberIDs = Object.keys(tornFactionData.members);
+	const memberIDs = Object.values(tornFactionData.members).map((m) => m.id);
 	currentFFScouterSpies = (await fetchFFScouterSpies(factionID, memberIDs)) || {};
 
-	currentStatuses = Object.entries(tornFactionData.members).map(([userID, m]) => ({
-		userID,
+	currentStatuses = Object.entries(tornFactionData.members).map(([_, m]) => ({
+		userID: m.id,
 		name: m.name,
+		level: m.level,
+		last_action: m.last_action,
+		lastActionStatus: m.last_action.status,
 		status: m.status.state,
+		until: m.status.until || false,
 		description: m.status.description,
-		durationSeconds: parseTimeToSeconds(m.status.description),
-		lastActionStatus: m.last_action?.status || "Offline",
-		yataSpyData: currentYataSpies[userID] || null,
-		ffscouterSpyData: currentFFScouterSpies[userID] || null,
+		is_revivable: m.status.is_revivable,
+		durationSeconds: (m.status.until - Math.floor(Date.now() / 1000) || 0) * (m.status.state === "Okay" ? 0 : 1),
+		yataSpyData: currentYataSpies[m.id.toString()] || null,
+		ffscouterSpyData: currentFFScouterSpies[m.id.toString()] || null,
 	}));
 
 	let newlyOkayPlayerDetected = false;
@@ -728,6 +760,7 @@ async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox, isInitialCall 
 			if (!usersOkayInPreviousCycle.has(member.userID)) newlyOkayPlayerDetected = true;
 		}
 	});
+
 	if (stakeoutCheckbox?.checked && newlyOkayPlayerDetected) playAlertSound();
 	updateFactionDisplay(currentStatuses, factionID);
 }
