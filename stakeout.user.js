@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    http://tampermonkey.net/
-// @version      2.6.0
+// @version      2.6.1
 // @description  Stakeout factions or individual users
 // @author       Titanic_
 // @match        https://www.torn.com/profiles.php?XID=*
@@ -51,7 +51,7 @@ const CATEGORY_ORDER = [
 ];
 
 const DB_NAME = "StakeoutDB";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const YATA_SPIES_STORE_NAME = "yataFactionSpies";
 const FFSCOUTER_SPIES_STORE_NAME = "ffscouterFactionSpies";
 const TORN_FACTION_API_STORE_NAME = "tornFactionApiCache";
