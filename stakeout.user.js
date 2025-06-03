@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    http://tampermonkey.net/
-// @version      2.6.1
+// @version      2.6.2
 // @description  Stakeout factions or individual users
 // @author       Titanic_
 // @match        https://www.torn.com/profiles.php?XID=*
@@ -406,7 +406,7 @@ async function checkIndividualUserAndAlert(alertedUserID) {
 	}
 }
 
-function createActionButton(icon, title, href, baseColor, hoverColor, additionalStyles = {}) {
+function createActionButton(icon, title, href, baseColor, hoverColor, additionalStyles = {}, onclick = null) {
 	const button = createStyledElement(
 		"a",
 		{
@@ -427,6 +427,7 @@ function createActionButton(icon, title, href, baseColor, hoverColor, additional
 	);
 	button.onmouseover = () => (button.style.backgroundColor = hoverColor);
 	button.onmouseout = () => (button.style.backgroundColor = baseColor);
+    if (typeof onclick === "function") button.addEventListener("click", onclick)
 	return button;
 }
 
@@ -589,10 +590,24 @@ function createMemberElement(member, categoryName) {
 		};
 		actionsContainer.appendChild(spyButton);
 	}
+
+    function tooltipBug() {
+        const existingTooltips = new Set(Array.from(document.querySelectorAll('[id^="ui-tooltip-"]')).map(el => el.id));
+
+        const interval = setInterval(() => {
+            const newTooltip = Array.from(document.querySelectorAll('[id^="ui-tooltip-"]')).find(el => !existingTooltips.has(el.id));
+
+            if (newTooltip) {
+                newTooltip.remove();
+                clearInterval(interval);
+            }
+        }, 500);
+    }
+
 	actionsContainer.append(
-		createActionButton("👤", "View Profile", `https://www.torn.com/profiles.php?XID=${member.userID}`, "#555", "#666"),
-		createActionButton("⚔️", "Attack User", `https://www.torn.com/loader.php?sid=attack&user2ID=${member.userID}`, "#c0392b", "#a93226")
-	);
+		createActionButton("👤", "View Profile", `https://www.torn.com/profiles.php?XID=${member.userID}`, "#555", "#666", null, tooltipBug),
+		createActionButton("⚔️", "Attack User", `https://www.torn.com/loader.php?sid=attack&user2ID=${member.userID}`, "#c0392b", "#a93226", null, tooltipBug)
+    )
 	memberDiv.append(memberInfoContainer, actionsContainer);
 	return memberDiv;
 }
