@@ -215,19 +215,11 @@ async function fetchApi(endpoint, selections = "basic", apiKey = currentApiKey) 
 		let finalUrl;
         if (isTornApi) {
             finalUrl = `https://api.torn.com/${endpoint}?key=${apiKey}`;
-            if (selections) { // Add selections if they exist and are not empty
-                finalUrl += `&selections=${selections}`;
-            }
-            // Add timestamp for v2 faction members calls
-            if (endpoint.startsWith("v2/faction/") && endpoint.includes("/members")) {
-                finalUrl += `&timestamp=${Date.now()}`;
-            }
+            if (selections) finalUrl += `&selections=${selections}`;
+            if (endpoint.startsWith("v2/faction/") && endpoint.includes("/members")) finalUrl += `&timestamp=${Date.now()}`;
         } else {
-            finalUrl = endpoint; // For YATA/FFScouter
-            // Append key for YATA if not already in URL (FFScouter includes it in endpoint construction)
-            if (!isFFScouterApi && !finalUrl.includes("key=")) {
-                finalUrl += `${finalUrl.includes("?") ? "&" : "?"}key=${apiKey}`;
-            }
+            finalUrl = endpoint;
+            if (!isFFScouterApi && !finalUrl.includes("key=")) finalUrl += `${finalUrl.includes("?") ? "&" : "?"}key=${apiKey}`;
         }
 
 		console.log(`[Stakeout] Fetching API: ${finalUrl}`);
@@ -322,7 +314,7 @@ async function fetchFactionMembersWithCache(factionID) {
 	}
 
 	console.log(`[Stakeout] Fetching fresh Torn faction data for Faction ID: ${factionID} (interval: ${currentMonitoringIntervalSecs}s)`);
-	const freshData = await fetchApi(`v2/faction/${factionID}/members`, ""); // "" for selections, as v2/members doesn't use it like user/ or old faction/
+	const freshData = await fetchApi(`v2/faction/${factionID}/members`, "");
 
 	if (freshData && !freshData.error) await saveFactionApiCacheToDB(factionID, freshData);
 
@@ -1013,7 +1005,7 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		if (monitorIntervalId) clearInterval(monitorIntervalId);
 		clearAllIndividualMonitors();
 		clearAllCountdownIntervals();
-		fetchMonitorAndUpdate(factionID, stakeoutCheckbox); // Initial fetch on start
+		fetchMonitorAndUpdate(factionID, stakeoutCheckbox);
 		monitorIntervalId = setInterval(() => fetchMonitorAndUpdate(factionID, stakeoutCheckbox), interval * 1000);
 	};
 
@@ -1029,7 +1021,7 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 
 	stakeoutCheckbox.addEventListener("change", () => {
         const selectedInterval = parseInt(intervalDropdown.value);
-        currentMonitoringIntervalSecs = selectedInterval; // Update global on checkbox change as well
+        currentMonitoringIntervalSecs = selectedInterval;
         if (stakeoutCheckbox.checked) {
             startMonitoring(selectedInterval);
         } else {
@@ -1038,7 +1030,7 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
     });
 	intervalDropdown.addEventListener("change", () => {
 		const selectedInterval = parseInt(intervalDropdown.value);
-        currentMonitoringIntervalSecs = selectedInterval; // Update global on dropdown change
+        currentMonitoringIntervalSecs = selectedInterval;
 		if (stakeoutCheckbox.checked) {
             startMonitoring(selectedInterval);
         }
@@ -1049,9 +1041,7 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 
 function initialFactionLoad(factionID) {
 	yataApiKeyChangedGlobal = false;
-    // For initial load, stakeoutCheckbox doesn't exist yet or is conceptually false.
-    // The currentMonitoringIntervalSecs will be its default (e.g., 30s) or last set value if persisted.
-	fetchMonitorAndUpdate(factionID, { checked: false } /* dummy checkbox state */, true /* isInitialCall */);
+	fetchMonitorAndUpdate(factionID, { checked: false }, true);
 }
 
 function addStakeoutElementsToProfiles(statusElement) {
