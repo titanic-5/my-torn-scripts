@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    http://tampermonkey.net/
-// @version      2.6.2
+// @version      2.6.3
 // @description  Stakeout factions or individual users
 // @author       Titanic_
 // @match        https://www.torn.com/profiles.php?XID=*
@@ -30,6 +30,7 @@ const STATE_PREFIX = "stakeout_category_state_";
 const COLLAPSED_KEY = "stakeout_main_display_collapsed";
 const YATA_KEY = "stakeoutYataApiKey";
 const FFSCOUTER_KEY = "stakeoutFFScouterApiKey";
+const TIMER_KEY = "stakeoutFactionMonitoringIntervalSecs";
 
 const STATUS_CATEGORIES = {
 	OKAY: "Okay",
@@ -56,7 +57,6 @@ const YATA_SPIES_STORE_NAME = "yataFactionSpies";
 const FFSCOUTER_SPIES_STORE_NAME = "ffscouterFactionSpies";
 const TORN_FACTION_API_STORE_NAME = "tornFactionApiCache";
 
-const TORN_FACTION_API_CACHE_DURATION_MS = 29 * 1000; // 29 seconds
 const SPY_CACHE_DURATION_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 const FFSCOUTER_TARGETS_PER_REQ = 205;
 
@@ -70,6 +70,7 @@ let currentFFScouterSpies = {};
 let yataApiKeyChangedGlobal = false;
 let modalEscapeKeyListener = null;
 let dbPromise = null;
+let currentMonitoringIntervalSecs = 30;
 
 function createStyledElement(tag, styles = {}, attributes = {}) {
 	const element = document.createElement(tag);
@@ -209,11 +210,25 @@ async function fetchApi(endpoint, selections = "basic", apiKey = currentApiKey) 
 		const isFFScouterApi = endpoint.startsWith("https://ffscouter.com/api/v1/get-stats");
 
 		if (isTornApi && (!apiKey || apiKey === API_KEY_PLACEHOLDER)) return resolve({ error: { error: "API Key not set" } });
-
 		if (!isTornApi && !isFFScouterApi && !apiKey && !endpoint.includes("key=")) return resolve({ error: { error: "API Key not set for external service" } });
 
-		let finalUrl = isTornApi ? `https://api.torn.com/${endpoint}?key=${apiKey}&selections=${selections}` : endpoint;
-		if (!isTornApi && !isFFScouterApi && !finalUrl.includes("key=")) finalUrl += `${finalUrl.includes("?") ? "&" : "?"}key=${apiKey}`;
+		let finalUrl;
+        if (isTornApi) {
+            finalUrl = `https://api.torn.com/${endpoint}?key=${apiKey}`;
+            if (selections) { // Add selections if they exist and are not empty
+                finalUrl += `&selections=${selections}`;
+            }
+            // Add timestamp for v2 faction members calls
+            if (endpoint.startsWith("v2/faction/") && endpoint.includes("/members")) {
+                finalUrl += `&timestamp=${Date.now()}`;
+            }
+        } else {
+            finalUrl = endpoint; // For YATA/FFScouter
+            // Append key for YATA if not already in URL (FFScouter includes it in endpoint construction)
+            if (!isFFScouterApi && !finalUrl.includes("key=")) {
+                finalUrl += `${finalUrl.includes("?") ? "&" : "?"}key=${apiKey}`;
+            }
+        }
 
 		console.log(`[Stakeout] Fetching API: ${finalUrl}`);
 		GM_xmlhttpRequest({
@@ -300,13 +315,14 @@ function createApiErrorDisplay(serviceName, errorMessage, errorId) {
 async function fetchFactionMembersWithCache(factionID) {
 	const cachedItem = await getFactionApiDataFromDB(factionID);
 
-	if (cachedItem && isCacheValid(cachedItem, TORN_FACTION_API_CACHE_DURATION_MS)) {
-		console.log(`[Stakeout] Using cached faction data for ${factionID}`);
+    const dynamicCacheDurationMs = Math.max(1000, (currentMonitoringIntervalSecs * 1000) - 1000);
+	if (cachedItem && isCacheValid(cachedItem, dynamicCacheDurationMs)) {
+		console.log(`[Stakeout] Using cached faction data for ${factionID} (cache valid for ${dynamicCacheDurationMs / 1000}s based on ${currentMonitoringIntervalSecs}s interval)`);
 		return cachedItem.data;
 	}
 
-	console.log(`[Stakeout] Fetching fresh Torn faction data for Faction ID: ${factionID}`);
-	const freshData = await fetchApi(`v2/faction/${factionID}/members`, "");
+	console.log(`[Stakeout] Fetching fresh Torn faction data for Faction ID: ${factionID} (interval: ${currentMonitoringIntervalSecs}s)`);
+	const freshData = await fetchApi(`v2/faction/${factionID}/members`, ""); // "" for selections, as v2/members doesn't use it like user/ or old faction/
 
 	if (freshData && !freshData.error) await saveFactionApiCacheToDB(factionID, freshData);
 
@@ -735,7 +751,7 @@ async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox, isInitialCall 
 	document.getElementById("yata-api-error-message")?.remove();
 	document.getElementById("ffscouter-api-error-message")?.remove();
 
-	const tornFactionData = await fetchFactionMembersWithCache(factionID, TORN_FACTION_API_CACHE_DURATION_MS); // fetchApi(`v2/faction/${factionID}/members`, "");
+	const tornFactionData = await fetchFactionMembersWithCache(factionID);
 
 	if (tornFactionData?.error || !tornFactionData?.members) {
 		console.error("[Stakeout] Error fetching faction data:", tornFactionData?.error?.error || "No member data");
@@ -953,8 +969,8 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		{ id: "factionStakeoutInterval" }
 	);
 
-	[30, 60].forEach((val) => intervalDropdown.add(new Option(val.toString(), val.toString())));
-	intervalDropdown.value = "30";
+	[5, 10, 20, 30, 60].forEach((val) => intervalDropdown.add(new Option(val.toString(), val.toString())));
+	intervalDropdown.value = localStorage.getItem(TIMER_KEY) || currentMonitoringIntervalSecs.toString();
 	monitorControls.append(
 		stakeoutCheckbox,
 		createStyledElement("label", { marginRight: "5px", cursor: "pointer" }, { htmlFor: "factionStakeoutCheckbox", textContent: "Monitor every" }),
@@ -992,10 +1008,12 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 	controlsContainer.append(monitorControls, apiKeyButton, toggleDisplayButton, spiesButton);
 
 	const startMonitoring = (interval) => {
+        currentMonitoringIntervalSecs = interval;
+        localStorage.setItem(TIMER_KEY, interval.toString());
 		if (monitorIntervalId) clearInterval(monitorIntervalId);
 		clearAllIndividualMonitors();
 		clearAllCountdownIntervals();
-		fetchMonitorAndUpdate(factionID, stakeoutCheckbox);
+		fetchMonitorAndUpdate(factionID, stakeoutCheckbox); // Initial fetch on start
 		monitorIntervalId = setInterval(() => fetchMonitorAndUpdate(factionID, stakeoutCheckbox), interval * 1000);
 	};
 
@@ -1009,9 +1027,21 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 		document.getElementById("ffscouter-api-error-message")?.remove();
 	};
 
-	stakeoutCheckbox.addEventListener("change", () => (stakeoutCheckbox.checked ? startMonitoring(parseInt(intervalDropdown.value)) : stopMonitoring()));
+	stakeoutCheckbox.addEventListener("change", () => {
+        const selectedInterval = parseInt(intervalDropdown.value);
+        currentMonitoringIntervalSecs = selectedInterval; // Update global on checkbox change as well
+        if (stakeoutCheckbox.checked) {
+            startMonitoring(selectedInterval);
+        } else {
+            stopMonitoring();
+        }
+    });
 	intervalDropdown.addEventListener("change", () => {
-		if (stakeoutCheckbox.checked) startMonitoring(parseInt(intervalDropdown.value));
+		const selectedInterval = parseInt(intervalDropdown.value);
+        currentMonitoringIntervalSecs = selectedInterval; // Update global on dropdown change
+		if (stakeoutCheckbox.checked) {
+            startMonitoring(selectedInterval);
+        }
 	});
 
 	factionPageElement.insertBefore(controlsContainer, factionPageElement.firstChild);
@@ -1019,7 +1049,9 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
 
 function initialFactionLoad(factionID) {
 	yataApiKeyChangedGlobal = false;
-	fetchMonitorAndUpdate(factionID, { checked: false } /* stakeoutCheckbox dummy */, true /* isInitialCall */);
+    // For initial load, stakeoutCheckbox doesn't exist yet or is conceptually false.
+    // The currentMonitoringIntervalSecs will be its default (e.g., 30s) or last set value if persisted.
+	fetchMonitorAndUpdate(factionID, { checked: false } /* dummy checkbox state */, true /* isInitialCall */);
 }
 
 function addStakeoutElementsToProfiles(statusElement) {
