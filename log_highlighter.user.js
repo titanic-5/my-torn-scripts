@@ -15,7 +15,6 @@
 
     const ignoreClasses = [
         'attacking-events-grenade-use',
-        'attacking-events-assault',
         'attacking-events-miss',
         'attacking-events-attack-join',
         'attacking-events-reloading',
