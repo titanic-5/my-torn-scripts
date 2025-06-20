@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Attack Log Highlighter
 // @namespace    Titanic_
-// @version      1.2
+// @version      1.3
 // @description  Highlight special events in attack logs
 // @author       Titanic_
 // @match        https://www.torn.com/loader.php?sid=attackLog*
