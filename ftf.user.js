@@ -12,7 +12,7 @@
 (function () {
     'use strict';
 
-    let facIDs, maxLevel, apiKey, attackLink, newTab, randTarget, randFaction, ffScouterApiKey, maxStats, db;
+    // Configurable
     let defaultFacIDs = [
         50231, 50157, 50586, 50498, 51275, 50597, 51684, 50994, 51668, 50664, 50194,
         50186, 52471, 50103, 51562, 51612, 50406, 51313, 50273, 50375, 50272, 50386,
@@ -22,7 +22,9 @@
 
     const NO_API_MIN_ID = 2800000;
     const NO_API_MAX_ID = 3100000;
+    // End of configurable
 
+    let facIDs, maxLevel, apiKey, attackLink, newTab, randTarget, randFaction, ffScouterApiKey, maxStats, db;
     const DB_NAME = 'FTF_Cache';
     const STORE_NAME = 'ff_stats';
     const DB_VERSION = 1;
@@ -63,9 +65,7 @@
                 const request = store.get(id);
                 request.onsuccess = event => {
                     const result = event.target.result;
-                    if (result && (Date.now() - result.timestamp < CACHE_DURATION)) {
-                        results[id] = result;
-                    }
+                    if (result && (Date.now() - result.timestamp < CACHE_DURATION)) results[id] = result;
                     if (++processedCount === userIds.length) resolve(results);
                 };
                 request.onerror = () => {
@@ -129,6 +129,24 @@
 
     init();
 
+    function parseSuffixedNumber(input) {
+        if (!input) return 0;
+        const s = String(input).trim().toLowerCase();
+        const lastChar = s.slice(-1);
+        let value = parseFloat(s);
+
+        if (isNaN(value)) return 0;
+
+        switch (lastChar) {
+            case 'k': value *= 1e3; break;
+            case 'm': value *= 1e6; break;
+            case 'b': value *= 1e9; break;
+            case 't': value *= 1e12; break;
+            case 'q': value *= 1e15; break;
+        }
+        return Math.floor(value);
+    }
+
     function init() {
         const storedFacIDs = localStorage.getItem('FTF_FACTIONS') !== null ? localStorage.getItem('FTF_FACTIONS') : defaultFacIDs.join(',');
         facIDs = storedFacIDs.split(',').map(Number).filter(id => !isNaN(id) && id > 0);
@@ -172,16 +190,14 @@
         localStorage.setItem('FTF_FF_API', newFFApiKey);
         localStorage.setItem('FTF_MAX_STATS', newMaxStats);
 
-        if (newApiKey && newApiKey.trim() !== '') {
-            localStorage.setItem('FTF_API', newApiKey);
-        } else {
+        if (newApiKey && newApiKey.trim() !== '') localStorage.setItem('FTF_API', newApiKey);
+        else {
             alert('Invalid API key entered!');
             return;
         }
 
-        if (newLevel >= 0 && newLevel <= 100) {
-            localStorage.setItem('FTF_LEVEL', newLevel);
-        } else {
+        if (newLevel >= 0 && newLevel <= 100) localStorage.setItem('FTF_LEVEL', newLevel);
+        else {
             alert('Invalid max level, please enter a value between 0 and 100!');
             return;
         }
@@ -199,22 +215,12 @@
         initDB().then(() => {
             console.log("[FTF] Checking personal Target List first...");
             processTargetList(null, (targetID) => {
-                if (targetID) {
-                    console.log(`[FTF] Target found in personal list: ${targetID}.`);
-                } else {
-                    console.log("[FTF] No suitable targets in personal list. Checking factions...");
-                    processUrls();
-                }
+                if (!targetID) processUrls();
             });
         }).catch(err => {
             console.error("[FTF] Failed to initialize DB. Stat checking will be disabled.", err);
             processTargetList(null, (targetID) => {
-                if (targetID) {
-                    console.log(`[FTF] Target found in personal list: ${targetID}.`);
-                } else {
-                    console.log("[FTF] No suitable targets in personal list. Checking factions...");
-                    processUrls();
-                }
+                if (!targetID) processUrls();
             });
         });
     }
@@ -227,7 +233,7 @@
             return target.id || target;
         }
 
-        console.log(`[FTF] Stat filtering ${potentialTargets.length} potential targets (max stats: ${maxStats.toLocaleString()})`);
+        //console.log(`[FTF] Stat filtering ${potentialTargets.length} potential targets (max stats: ${maxStats.toLocaleString()})`);
         const targetIds = potentialTargets.map(t => t.id || t);
 
         try {
@@ -248,7 +254,7 @@
                 return statInfo.stats.bs_estimate <= maxStats;
             });
 
-            console.log(`[FTF] After stat filtering, ${finalTargets.length} targets remain.`);
+            //console.log(`[FTF] After stat filtering, ${finalTargets.length} targets remain.`);
             if (finalTargets.length === 0) return null;
 
             const finalTarget = randTarget ? finalTargets[Math.floor(Math.random() * finalTargets.length)] : finalTargets[0];
@@ -299,7 +305,7 @@
         }
 
         if (checked.size >= facIDs.length) {
-            console.log("[FTF] No players met the conditions in any faction. Using failsafe random target.");
+            //console.log("[FTF] No players met the conditions in any faction. Using failsafe random target.");
             openRandomNoApiTarget();
             return;
         }
@@ -324,10 +330,9 @@
 
                 if (potentialTargets && potentialTargets.length > 0) {
                     filterAndSelectTarget(potentialTargets).then(targetId => {
-                        if (targetId) {
-                            openTargetPage(targetId);
-                        } else {
-                            console.log(`[FTF] No targets passed stat filter in faction ${facIDs[index]}. Moving on.`);
+                        if (targetId) openTargetPage(targetId);
+                        else {
+                            //console.log(`[FTF] No targets passed stat filter in faction ${facIDs[index]}. Moving on.`);
                             processUrls(index + 1, checked);
                         }
                     });
@@ -356,29 +361,24 @@
 
     function openTargetPage(targetId) {
         let profileLink;
-        if (attackLink) {
-            profileLink = `https://www.torn.com/loader.php?sid=attack&user2ID=${targetId}`;
-        } else {
-            profileLink = `https://www.torn.com/profiles.php?XID=${targetId}`;
-        }
+        if (attackLink) profileLink = `https://www.torn.com/loader.php?sid=attack&user2ID=${targetId}`;
+        else profileLink = `https://www.torn.com/profiles.php?XID=${targetId}`;
 
-        if (newTab) {
-            window.open(profileLink, '_blank');
-        } else {
-            window.location.href = profileLink;
-        }
+        if (newTab) window.open(profileLink, '_blank');
+        else window.location.href = profileLink;
     }
 
     function openRandomNoApiTarget() {
         const randomID = Math.floor(Math.random() * (NO_API_MAX_ID - NO_API_MIN_ID + 1)) + NO_API_MIN_ID;
-        console.log(`[FTF] Opening random (no-API) target: ${randomID}`);
+        //console.log(`[FTF] Opening random (no-API) target: ${randomID}`);
         openTargetPage(randomID);
     }
 
     const findBtn = createButton('Find Target', 'ftf-btn', findTarget);
+    const chainSaveBtn = createButton('Chain Save', 'ftf-chain-save', openRandomNoApiTarget);
     const settBtn = createButton('Settings', 'ftf-settings', toggleSettings);
     const container = createDiv('ftf-container');
-    container.append(findBtn, settBtn);
+    container.append(chainSaveBtn, findBtn, settBtn);
     document.body.appendChild(container);
 
     let settingsModal;
@@ -492,6 +492,9 @@
     }
 
     function updateTimerColor(timerElement) {
+        const wrapper = timerElement.parentNode;
+        if (!wrapper || !wrapper.classList.contains('ftf-timer-wrapper')) return;
+
         const timeText = timerElement.textContent;
         const parts = timeText.split(':').map(Number);
         if (parts.length !== 2) return;
@@ -499,26 +502,28 @@
         const [minutes, seconds] = parts;
         const totalSeconds = (minutes * 60) + seconds;
 
-        timerElement.classList.remove('ftf-timer-red', 'ftf-timer-yellow', 'ftf-timer-green');
-        if (totalSeconds < 15) {
-            timerElement.classList.add('ftf-timer-red');
-        } else if (totalSeconds <= 60) {
-            timerElement.classList.add('ftf-timer-yellow');
-        } else {
-            timerElement.classList.add('ftf-timer-green');
-        }
+        wrapper.classList.remove('ftf-timer-red', 'ftf-timer-yellow', 'ftf-timer-green');
+
+        if (totalSeconds == 0) return
+        else if (totalSeconds < 60) wrapper.classList.add('ftf-timer-red');
+        else if (totalSeconds <= 180) wrapper.classList.add('ftf-timer-yellow');
+        else wrapper.classList.add('ftf-timer-green');
     }
 
     const chainBarObserver = new MutationObserver((mutations, obs) => {
         const timerElement = document.querySelector('.bar-timeleft___B9RGV');
         if (timerElement) {
-            console.log('[FTF] Chain timer found. Enhancing...');
             timerElement.addEventListener('click', openRandomNoApiTarget);
+
+            const timerWrapper = document.createElement('div');
+            timerWrapper.className = 'ftf-timer-wrapper';
+            timerElement.parentNode.insertBefore(timerWrapper, timerElement);
+            timerWrapper.appendChild(timerElement);
 
             const timerTextObserver = new MutationObserver(() => updateTimerColor(timerElement));
             timerTextObserver.observe(timerElement, { characterData: true, childList: true, subtree: true });
-            updateTimerColor(timerElement);
 
+            updateTimerColor(timerElement);
             obs.disconnect();
         }
     });
@@ -527,24 +532,6 @@
         childList: true,
         subtree: true
     });
-
-    function parseSuffixedNumber(input) {
-        if (!input) return 0;
-        const s = String(input).trim().toLowerCase();
-        const lastChar = s.slice(-1);
-        let value = parseFloat(s);
-
-        if (isNaN(value)) return 0;
-
-        switch (lastChar) {
-            case 'k': value *= 1e3; break;
-            case 'm': value *= 1e6; break;
-            case 'b': value *= 1e9; break;
-            case 't': value *= 1e12; break;
-            case 'q': value *= 1e15; break;
-        }
-        return Math.floor(value);
-    }
 
     function addGlobalStyle(css) {
         var head, style;
@@ -570,7 +557,8 @@
         }
 
         .ftf-btn,
-        .ftf-settings {
+        .ftf-settings,
+        .ftf-chain-save {
             font-size: 1em;
             padding: 5px 12px;
             cursor: pointer;
@@ -596,6 +584,14 @@
             background: #333
         }
 
+        .ftf-chain-save {
+            background: #7a5a00;
+        }
+
+        .ftf-chain-save:hover {
+            background: #8b6b00;
+        }
+
         .ftf-modal-overlay {
             position: fixed;
             top: 0;
@@ -613,8 +609,10 @@
             background: #111;
             border-radius: 8px;
             max-width: 450px;
+            max-height: 80vh;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
         }
 
         .ftf-modal-body {
@@ -622,11 +620,12 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
+            overflow-y: auto;
+            flex: 1;
         }
 
         .ftf-settings-row {
             display: grid;
-            grid-template-columns: 1fr auto;
             gap: 7px;
             align-items: center;
         }
@@ -764,8 +763,7 @@
 
         .ftf-remove-btn {
             padding: 2px 8px;
-            font-size: 14px;
-            font-weight: bold;
+            font-size: 1.1em;
             color: #fff;
             background: #9d2f2f;
             border: 1px solid #712020;
@@ -779,22 +777,45 @@
             display: block !important;
         }
 
+        .ftf-timer-wrapper {
+            display: inline-block;
+            border-radius: 8px;
+            padding: 3px 5px;
+            transition: all 0.3s ease;
+        }
+
         .bar-timeleft___B9RGV {
-            font-size: 60px !important;
+            font-size: 60px;
             cursor: pointer;
             transition: color 0.3s;
         }
 
         .ftf-timer-green {
             color: #4CAF50 !important;
+            background-color: rgba(76, 175, 80, 0.2) !important;
         }
 
         .ftf-timer-yellow {
             color: #FFC107 !important;
+            background-color: rgba(255, 193, 7, 0.2) !important;
         }
 
         .ftf-timer-red {
             color: #F44336 !important;
+            background-color: rgba(244, 67, 54, 0.3);
+            animation: pulse-red 3s infinite;
+        }
+
+        @keyframes pulse-red {
+            0% {
+                background-color: rgba(244, 67, 54, 0.3);
+            }
+            50% {
+                background-color: rgba(244, 67, 54, 0.6);
+            }
+            100% {
+                background-color: rgba(244, 67, 54, 0.3);
+            }
         }
     `);
 
