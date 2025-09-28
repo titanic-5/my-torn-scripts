@@ -12,6 +12,7 @@
 (function () {
     'use strict';
 
+    let facIDs, maxLevel, apiKey, attackLink, newTab, randTarget, randFaction, ffScouterApiKey, maxStats, db;
     let defaultFacIDs = [
         50231, 50157, 50586, 50498, 51275, 50597, 51684, 50994, 51668, 50664, 50194,
         50186, 52471, 50103, 51562, 51612, 50406, 51313, 50273, 50375, 50272, 50386,
@@ -19,13 +20,13 @@
         52429, 52445, 52378, 48264,
     ];
 
-    let facIDs, maxLevel, apiKey, attackLink, newTab, randTarget, randFaction, ffScouterApiKey, maxStats;
+    const NO_API_MIN_ID = 2800000;
+    const NO_API_MAX_ID = 3100000;
 
     const DB_NAME = 'FTF_Cache';
     const STORE_NAME = 'ff_stats';
     const DB_VERSION = 1;
     const CACHE_DURATION = 10 * 24 * 60 * 60 * 1000; // 10 days
-    let db;
 
     function initDB() {
         return new Promise((resolve, reject) => {
@@ -68,7 +69,7 @@
                     if (++processedCount === userIds.length) resolve(results);
                 };
                 request.onerror = () => {
-                    if (++processedCount === userIds.length) resolve(results); // Resolve with what we have
+                    if (++processedCount === userIds.length) resolve(results);
                 };
             });
         });
@@ -125,29 +126,11 @@
             Promise.all(promises).then(results => resolve([].concat(...results)));
         });
     }
-    
+
     init();
 
-    function parseSuffixedNumber(input) {
-        if (!input) return 0;
-        const s = String(input).trim().toLowerCase();
-        const lastChar = s.slice(-1);
-        let value = parseFloat(s);
-
-        if (isNaN(value)) return 0;
-
-        switch (lastChar) {
-            case 'k': value *= 1e3; break;
-            case 'm': value *= 1e6; break;
-            case 'b': value *= 1e9; break;
-            case 't': value *= 1e12; break;
-            case 'q': value *= 1e15; break;
-        }
-        return Math.floor(value);
-    }
-
     function init() {
-        const storedFacIDs = localStorage.getItem('FTF_FACTIONS') || defaultFacIDs.join(',');
+        const storedFacIDs = localStorage.getItem('FTF_FACTIONS') !== null ? localStorage.getItem('FTF_FACTIONS') : defaultFacIDs.join(',');
         facIDs = storedFacIDs.split(',').map(Number).filter(id => !isNaN(id) && id > 0);
 
         maxLevel = localStorage.getItem('FTF_LEVEL') || 100;
@@ -204,7 +187,7 @@
         }
 
         init();
-        alert("Settings saved!");
+        toggleSettings();
     }
 
     function findTarget() {
@@ -214,22 +197,22 @@
         }
 
         initDB().then(() => {
-            console.log("Checking personal Target List first...");
+            console.log("[FTF] Checking personal Target List first...");
             processTargetList(null, (targetID) => {
                 if (targetID) {
-                    console.log(`Target found: ${targetID}.`);
+                    console.log(`[FTF] Target found in personal list: ${targetID}.`);
                 } else {
-                    console.log("No suitable targets in personal list. Checking factions...");
+                    console.log("[FTF] No suitable targets in personal list. Checking factions...");
                     processUrls();
                 }
             });
         }).catch(err => {
             console.error("[FTF] Failed to initialize DB. Stat checking will be disabled.", err);
-             processTargetList(null, (targetID) => {
+            processTargetList(null, (targetID) => {
                 if (targetID) {
-                    console.log(`Target found: ${targetID}.`);
+                    console.log(`[FTF] Target found in personal list: ${targetID}.`);
                 } else {
-                    console.log("No suitable targets in personal list. Checking factions...");
+                    console.log("[FTF] No suitable targets in personal list. Checking factions...");
                     processUrls();
                 }
             });
@@ -278,7 +261,7 @@
     }
 
     function processTargetList(url, callback) {
-        const apiUrl = url || `https://api.torn.com/v2/user/list?cat=Targets&striptags=true&limit=50&sort=ASC&key=${apiKey}`;
+        const apiUrl = url || `https://api.torn.com/user/?selections=targets&key=${apiKey}`;
 
         GM_xmlhttpRequest({
             method: "GET",
@@ -287,28 +270,23 @@
                 const data = JSON.parse(response.responseText);
 
                 if (data.error) {
-                    console.error("Failed fetching Target List, reason:", data.error.error);
+                    console.error("[FTF] Failed fetching Target List, reason:", data.error.error);
                     return callback(null);
                 }
 
-                const suitableTargets = data.list.filter(user => user.level <= maxLevel && user.status.state === "Okay");
+                const targets = Object.values(data.targets || {});
+                const suitableTargets = targets.filter(user => user.level <= maxLevel && user.status.state === "Okay");
 
                 filterAndSelectTarget(suitableTargets).then(targetId => {
                     if (targetId) {
                         openTargetPage(targetId);
                         return callback(targetId);
                     }
-
-                    if (data._metadata && data._metadata.links.next) {
-                        console.log("No valid targets on this page, checking next page...");
-                        processTargetList(data._metadata.links.next, callback);
-                    } else {
-                        return callback(null);
-                    }
+                    return callback(null);
                 });
             },
             onerror(error) {
-                console.error("Error loading Target List URL:", error);
+                console.error("[FTF] Error loading Target List URL:", error);
                 return callback(null);
             }
         });
@@ -321,7 +299,8 @@
         }
 
         if (checked.size >= facIDs.length) {
-            alert("No players met the conditions in any faction (or API key is invalid).");
+            console.log("[FTF] No players met the conditions in any faction. Using failsafe random target.");
+            openRandomNoApiTarget();
             return;
         }
 
@@ -334,7 +313,7 @@
         checked.add(index);
 
         const url = `https://api.torn.com/faction/${facIDs[index]}?selections=basic&timestamp=${Date.now()}&key=${apiKey}`;
-        console.log(`Checking faction ID: ${facIDs[index]}`);
+        console.log(`[FTF] Checking faction ID: ${facIDs[index]}`);
 
         GM_xmlhttpRequest({
             method: "GET",
@@ -348,16 +327,16 @@
                         if (targetId) {
                             openTargetPage(targetId);
                         } else {
-                            console.log(`No targets passed stat filter in faction ${facIDs[index]}. Moving on.`);
+                            console.log(`[FTF] No targets passed stat filter in faction ${facIDs[index]}. Moving on.`);
                             processUrls(index + 1, checked);
                         }
                     });
                 } else {
-                     processUrls(index + 1, checked);
+                    processUrls(index + 1, checked);
                 }
             },
             onerror() {
-                console.log(`Error loading URL: ${url}`);
+                console.log(`[FTF] Error loading URL: ${url}`);
                 processUrls(index + 1, checked);
             }
         });
@@ -365,7 +344,7 @@
 
     function checkCondition(roster) {
         if ("error" in roster) {
-            console.log("Failed fetching faction roster, reason:", roster.error.error);
+            console.log("[FTF] Failed fetching faction roster, reason:", roster.error.error);
             return [];
         }
 
@@ -390,109 +369,181 @@
         }
     }
 
-    const raidBtn = createButton('Raid', 'ftf-btn', findTarget);
+    function openRandomNoApiTarget() {
+        const randomID = Math.floor(Math.random() * (NO_API_MAX_ID - NO_API_MIN_ID + 1)) + NO_API_MIN_ID;
+        console.log(`[FTF] Opening random (no-API) target: ${randomID}`);
+        openTargetPage(randomID);
+    }
+
+    const findBtn = createButton('Find Target', 'ftf-btn', findTarget);
     const settBtn = createButton('Settings', 'ftf-settings', toggleSettings);
-
-    const settDiv = createDiv('ftf-settings-container');
-    settDiv.append(settBtn);
     const container = createDiv('ftf-container');
-    container.append(raidBtn, settDiv);
-
+    container.append(findBtn, settBtn);
     document.body.appendChild(container);
 
-    function toggleSettings() {
-        const container = document.getElementsByClassName("ftf-settings-container")[0];
-        if (!container.classList.contains("ftf-settings-container-expanded")) {
-            container.classList.toggle("ftf-settings-container-expanded");
-            document.querySelector(".ftf-settings").textContent = "Close Settings";
+    let settingsModal;
+    createSettingsModal();
+    function createSettingsModal() {
+        const modalOverlay = createDiv('ftf-modal-overlay');
+        modalOverlay.id = 'ftf-settings-modal';
+        modalOverlay.style.display = 'none';
 
-            const appendElements = (parent, ...elements) => {
-                const tempDiv = document.createElement('div');
-                tempDiv.classList.add('temp-div');
-                elements.forEach(el => tempDiv.append(el));
-                parent.append(tempDiv);
-            };
+        const modalContent = createDiv('ftf-modal-content');
+        const modalBody = createDiv('ftf-modal-body');
 
-            const { input: apiKeyInput, label: apiKeyLabel } = createInput('ftf-api', "API Key (Public)", apiKey, "text");
-            appendElements(container, apiKeyLabel, apiKeyInput);
+        const appendElements = (parent, ...elements) => {
+            const tempDiv = document.createElement('div');
+            tempDiv.classList.add('ftf-settings-row');
+            elements.forEach(el => tempDiv.append(el));
+            parent.append(tempDiv);
+        };
 
-            const { input: ffApiInput, label: ffApiLabel } = createInput('ftf-ff-api', "FFScouter Key", ffScouterApiKey, "text");
-            appendElements(container, ffApiLabel, ffApiInput);
+        const { input: apiKeyInput, label: apiKeyLabel } = createInput('ftf-api', "API Key (Limited)", apiKey, "text");
+        appendElements(modalBody, apiKeyLabel, apiKeyInput);
 
-            const { input: maxInput, label: maxLabel } = createInput('ftf-max-level', "Max Level", maxLevel, "number");
-            appendElements(container, maxLabel, maxInput);
+        const { input: ffApiInput, label: ffApiLabel } = createInput('ftf-ff-api', "FFScouter Key", ffScouterApiKey, "text");
+        appendElements(modalBody, ffApiLabel, ffApiInput);
 
-            const { input: maxStatsInput, label: maxStatsLabel } = createInput('ftf-max-stats', "Max Stats (0=off, k,m,b,t,q)", localStorage.getItem('FTF_MAX_STATS') || maxStats, "text");
-            appendElements(container, maxStatsLabel, maxStatsInput);
+        const { input: maxInput, label: maxLabel } = createInput('ftf-max-level', "Max Level", maxLevel, "number");
+        appendElements(modalBody, maxLabel, maxInput);
 
-            const addFactionWrapper = createDiv('temp-div');
-            const addFactionLabel = document.createElement('label');
-            addFactionLabel.textContent = 'Add Faction ID';
-            const addControlsDiv = document.createElement('div');
-            const { input: addFactionInput } = createInput('ftf-add-faction-id', '', '', "number");
-            addFactionInput.style.width = '65px';
-            const addFactionBtn = createButton('Add', 'ftf-add-btn', () => {
-                const newId = parseInt(addFactionInput.value, 10);
-                if (newId && !isNaN(newId) && newId > 0) {
-                    if (!facIDs.includes(newId)) {
-                        facIDs.push(newId);
-                        renderFactionList();
-                        addFactionInput.value = '';
-                    } else { alert('That faction ID is already in the list.'); }
-                } else { alert('Please enter a valid faction ID.'); }
-            });
-            addControlsDiv.append(addFactionInput, addFactionBtn);
-            addFactionWrapper.append(addFactionLabel, addControlsDiv);
-            container.append(addFactionWrapper);
+        const { input: maxStatsInput, label: maxStatsLabel } = createInput('ftf-max-stats', "Max Stats (k,m,b...)", localStorage.getItem('FTF_MAX_STATS') || maxStats, "text");
+        appendElements(modalBody, maxStatsLabel, maxStatsInput);
 
-            const factionListContainer = createDiv('ftf-faction-list-container');
-            factionListContainer.id = 'ftf-faction-list-container';
-            container.append(factionListContainer);
+        const addFactionWrapper = createDiv('ftf-settings-row');
+        const addFactionLabel = document.createElement('label');
+        addFactionLabel.textContent = 'Faction List';
+        const addControlsDiv = createDiv('ftf-add-controls');
+        const { input: addFactionInput } = createInput('ftf-add-faction-id', '', '', "number");
+        addFactionInput.placeholder = 'Add ID...';
 
-            function renderFactionList() {
-                factionListContainer.innerHTML = '';
-                if (facIDs.length === 0) {
-                    factionListContainer.textContent = 'No factions in list.';
-                    return;
-                }
-                facIDs.forEach(id => {
-                    const item = document.createElement('div');
-                    item.className = 'ftf-faction-item';
-                    const nameSpan = document.createElement('span');
-                    nameSpan.textContent = id;
-                    item.appendChild(nameSpan);
-                    const removeBtn = createButton('✖', 'ftf-remove-btn', () => {
-                        const index = facIDs.indexOf(id);
-                        if (index > -1) facIDs.splice(index, 1);
-                        renderFactionList();
-                    });
-                    item.appendChild(removeBtn);
-                    factionListContainer.appendChild(item);
+        const addFactionBtn = createButton('Add', 'ftf-add-btn', () => {
+            const newId = parseInt(addFactionInput.value, 10);
+            if (newId && !isNaN(newId) && newId > 0) {
+                if (!facIDs.includes(newId)) {
+                    facIDs.push(newId);
+                    renderFactionList();
+                    addFactionInput.value = '';
+                } else { alert('That faction ID is already in the list.'); }
+            } else { alert('Please enter a valid faction ID.'); }
+        });
+        addControlsDiv.append(addFactionInput, addFactionBtn);
+        addFactionWrapper.append(addFactionLabel, addControlsDiv);
+        modalBody.append(addFactionWrapper);
+
+        const factionListContainer = createDiv('ftf-faction-list-container');
+        factionListContainer.id = 'ftf-faction-list-container';
+        const factionListRow = createDiv('ftf-settings-row');
+        factionListRow.append(factionListContainer);
+        modalBody.append(factionListRow);
+
+
+        function renderFactionList() {
+            factionListContainer.innerHTML = '';
+            if (facIDs.length === 0) {
+                factionListContainer.textContent = 'No factions in list.';
+                return;
+            }
+            facIDs.forEach(id => {
+                const item = document.createElement('div');
+                item.className = 'ftf-faction-item';
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = id;
+                item.appendChild(nameSpan);
+                const removeBtn = createButton('✖', 'ftf-remove-btn', () => {
+                    const index = facIDs.indexOf(id);
+                    if (index > -1) facIDs.splice(index, 1);
+                    renderFactionList();
                 });
-            }
-            renderFactionList();
-
-            const { checkbox: profileCheckbox, label: profileLabel } = createCheckbox('ftf-profile', "Open directly to attack page?", attackLink);
-            appendElements(container, profileLabel, profileCheckbox);
-
-            const { checkbox: tabCheckbox, label: tabLabel } = createCheckbox('ftf-newtab', "Open in new tab?", newTab);
-            appendElements(container, tabLabel, tabCheckbox);
-
-            const { checkbox: randomFCheckbox, label: randomFLabel } = createCheckbox('ftf-random-faction', "Switch to random faction?", randFaction);
-            appendElements(container, randomFLabel, randomFCheckbox);
-
-            const { checkbox: randomTCheckbox, label: randomTLabel } = createCheckbox('ftf-random-target', "Switch to random targets?", randTarget);
-            appendElements(container, randomTLabel, randomTCheckbox);
-
-            const saveBtn = createButton('Save', 'ftf-save', changeSettings);
-            container.append(saveBtn);
-        } else {
-            container.classList.toggle("ftf-settings-container-expanded");
-            document.querySelector(".ftf-settings").textContent = "Settings";
-            while (container.children.length > 1) {
-                container.removeChild(container.lastChild);
-            }
+                item.appendChild(removeBtn);
+                factionListContainer.appendChild(item);
+            });
         }
+
+        const { checkbox: profileCheckbox, label: profileLabel } = createCheckbox('ftf-profile', "Open directly to attack page?", attackLink);
+        appendElements(modalBody, profileCheckbox, profileLabel);
+
+        const { checkbox: tabCheckbox, label: tabLabel } = createCheckbox('ftf-newtab', "Open in new tab?", newTab);
+        appendElements(modalBody, tabCheckbox, tabLabel);
+
+        const { checkbox: randomFCheckbox, label: randomFLabel } = createCheckbox('ftf-random-faction', "Check random faction first?", randFaction);
+        appendElements(modalBody, randomFCheckbox, randomFLabel);
+
+        const { checkbox: randomTCheckbox, label: randomTLabel } = createCheckbox('ftf-random-target', "Select random target from list?", randTarget);
+        appendElements(modalBody, randomTCheckbox, randomTLabel);
+
+
+        const buttonContainer = createDiv('ftf-modal-buttons');
+        const saveBtn = createButton('Save', 'ftf-save', changeSettings);
+        const closeBtn = createButton('Close', 'ftf-close', toggleSettings);
+        buttonContainer.append(saveBtn, closeBtn);
+
+        modalContent.append(modalBody);
+        modalContent.append(buttonContainer);
+        modalOverlay.append(modalContent);
+        document.body.appendChild(modalOverlay);
+        settingsModal = modalOverlay;
+        renderFactionList();
+    }
+
+    function toggleSettings() {
+        if (!settingsModal) return;
+        settingsModal.style.display = settingsModal.style.display === 'none' ? 'flex' : 'none';
+    }
+
+    function updateTimerColor(timerElement) {
+        const timeText = timerElement.textContent;
+        const parts = timeText.split(':').map(Number);
+        if (parts.length !== 2) return;
+
+        const [minutes, seconds] = parts;
+        const totalSeconds = (minutes * 60) + seconds;
+
+        timerElement.classList.remove('ftf-timer-red', 'ftf-timer-yellow', 'ftf-timer-green');
+        if (totalSeconds < 15) {
+            timerElement.classList.add('ftf-timer-red');
+        } else if (totalSeconds <= 60) {
+            timerElement.classList.add('ftf-timer-yellow');
+        } else {
+            timerElement.classList.add('ftf-timer-green');
+        }
+    }
+
+    const chainBarObserver = new MutationObserver((mutations, obs) => {
+        const timerElement = document.querySelector('.bar-timeleft___B9RGV');
+        if (timerElement) {
+            console.log('[FTF] Chain timer found. Enhancing...');
+            timerElement.addEventListener('click', openRandomNoApiTarget);
+
+            const timerTextObserver = new MutationObserver(() => updateTimerColor(timerElement));
+            timerTextObserver.observe(timerElement, { characterData: true, childList: true, subtree: true });
+            updateTimerColor(timerElement);
+
+            obs.disconnect();
+        }
+    });
+
+    chainBarObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+
+    function parseSuffixedNumber(input) {
+        if (!input) return 0;
+        const s = String(input).trim().toLowerCase();
+        const lastChar = s.slice(-1);
+        let value = parseFloat(s);
+
+        if (isNaN(value)) return 0;
+
+        switch (lastChar) {
+            case 'k': value *= 1e3; break;
+            case 'm': value *= 1e6; break;
+            case 'b': value *= 1e9; break;
+            case 't': value *= 1e12; break;
+            case 'q': value *= 1e15; break;
+        }
+        return Math.floor(value);
     }
 
     function addGlobalStyle(css) {
@@ -506,88 +557,244 @@
     }
 
     addGlobalStyle(`
-        .ftf-btn, .ftf-save {
-            background-color: green;
-            color: white;
-            padding: 3px;
-            border-radius: 3px;
-            cursor: pointer;
-        }
-        .ftf-settings {
-            padding: 3px;
-            cursor: pointer;
-            border-radius: 3px;
-            background: #ffffff45;
-        }
         .ftf-container {
-            align-items: end;
             display: flex;
             flex-direction: column;
-            gap: 3px;
+            gap: 5px;
             position: fixed;
-            top: 30%;
+            top: 40%;
             right: 0;
             z-index: 9999;
             background-color: transparent;
+            border-radius: 5px;
         }
-        .ftf-settings-container {
-           color: black;
-           display: flex;
-           flex-direction: column;
-           align-items: flex-start;
-           background-color: orange;
-           border-radius: 3px;
+
+        .ftf-btn,
+        .ftf-settings {
+            font-size: 1em;
+            padding: 5px 12px;
+            cursor: pointer;
+            border: 1px solid #666;
+            border-radius: 5px;
+            color: #ddd;
+            text-shadow: 1px 1px 1px #000;
         }
-        .ftf-settings-container-expanded {
-           width: 300px;
-           height: fit-content;
-           border: 1px solid white;
-           align-items: center;
-           justify-content: flex-start;
-           gap: 8px;
-           padding: 8px;
+
+        .ftf-btn {
+            background: #5a5a5a;
         }
-        .temp-div {
+
+        .ftf-btn:hover {
+            background: #6b6b6b;
+        }
+
+        .ftf-settings {
+            background: #222;
+        }
+
+        .ftf-settings:hover {
+            background: #333
+        }
+
+        .ftf-modal-overlay {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 100000;
             display: flex;
-            flex-direction: row;
-            justify-content: space-between;
             align-items: center;
-            width: 95%;
+            justify-content: center;
         }
-        #ftf-api, #ftf-ff-api { width: 120px; }
-        #ftf-max-level { width: 50px; }
-        #ftf-max-stats { width: 80px; } /* Adjust width for max stats input */
-        #ftf-api, #ftf-ff-api, #ftf-max-level, #ftf-max-stats, #ftf-add-faction-id { text-align: right; background: #ffffff80; }
-        #ftf-faction-list-container {
-            width: 70%;
-            max-height: 150px;
-            overflow-y: auto;
-            border: 1px solid #ccc;
-            background: #ffffff45;
+
+        .ftf-modal-content {
+            color: #ccc;
+            background: #111;
+            border-radius: 8px;
+            max-width: 450px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .ftf-modal-body {
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .ftf-settings-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 7px;
+            align-items: center;
+        }
+
+        .ftf-settings-row label {
+            color: orange;
+        }
+
+        #ftf-api,
+        #ftf-ff-api,
+        #ftf-max-level,
+        #ftf-max-stats,
+        #ftf-add-faction-id {
+            background-color: transparent;
+            border: 1px solid #444;
+            color: white;
             padding: 5px;
-            border-radius: 3px;
+            border-radius: 4px;
+            text-align: left;
         }
+
+        .ftf-settings-row input[type="checkbox"] {
+            display: none;
+        }
+
+        .ftf-settings-row input[type="checkbox"]+label {
+            position: relative;
+            padding-left: 25px;
+            cursor: pointer;
+            color: white;
+            font-size: 1em;
+        }
+
+        .ftf-settings-row input[type="checkbox"]+label:before {
+            content: '';
+            position: absolute;
+            left: 0;
+            width: 16px;
+            height: 16px;
+            border: 1px solid #444;
+            border-radius: 5px;
+        }
+
+        .ftf-settings-row input[type="checkbox"]:checked+label:after {
+            content: '✔';
+            position: absolute;
+            left: 4px;
+            top: 1px;
+            font-size: 1em;
+            color: green;
+        }
+
+        #ftf-faction-list-container {
+            background: #222;
+            border: 1px solid #444;
+            padding: 5px;
+            border-radius: 4px;
+            max-height: 130px;
+            overflow-y: auto;
+            grid-column: 1 / -1;
+        }
+
         .ftf-faction-item {
             display: flex;
-            justify-content: space-evenly;
+            justify-content: space-between;
             align-items: center;
-            padding: 2px;
-            border-bottom: 1px solid #eee;
+            padding: 3px;
+            border-bottom: 1px solid #333;
+            font-size: 1em;
         }
-        .ftf-faction-item:last-child { border-bottom: none; }
-        .ftf-add-btn, .ftf-remove-btn {
-            background-color: green;
-            color: white;
-            border: none;
-            padding: 3px 6px;
-            cursor: pointer;
-            border-radius: 3px;
-            margin-left: 4px;
+
+        .ftf-faction-item:last-child {
+            border-bottom: none;
         }
+
+        .ftf-add-controls {
+            display: flex;
+            gap: 5px;
+        }
+
+        #ftf-add-faction-id {
+            flex-grow: 1;
+        }
+
+        .ftf-modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            border-top: 1px solid #555;
+            padding: 10px;
+            background: #222;
+            border-radius: 0 0 8px 8px;
+        }
+
+        .ftf-save,
+        .ftf-close,
+        .ftf-add-btn,
         .ftf-remove-btn {
-            background-color: #f44336;
-            font-family: monospace;
-            padding: 1px 5px;
+            padding: 6px 15px;
+            cursor: pointer;
+            border-radius: 5px;
+            text-shadow: 1px 1px 1px #000;
+        }
+
+        .ftf-save {
+            color: #fff;
+            background: #507b34;
+            border: 1px solid #365223;
+        }
+
+        .ftf-save:hover {
+            background: #5c8f3c;
+        }
+
+        .ftf-close {
+            color: #ddd;
+            background: #5a5a5a;
+            border: 1px solid #333;
+        }
+
+        .ftf-close:hover {
+            background: #6b6b6b;
+        }
+
+        .ftf-add-btn {
+            padding: 6px 10px;
+            color: #fff;
+            background: #34687b;
+            border: 1px solid #234752;
+        }
+
+        .ftf-add-btn:hover {
+            background: #3c7a8f;
+        }
+
+        .ftf-remove-btn {
+            padding: 2px 8px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #fff;
+            background: #9d2f2f;
+            border: 1px solid #712020;
+        }
+
+        .ftf-remove-btn:hover {
+            background: #b13535;
+        }
+
+        .bar-stats___E_LqA {
+            display: block !important;
+        }
+
+        .bar-timeleft___B9RGV {
+            font-size: 60px !important;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .ftf-timer-green {
+            color: #4CAF50 !important;
+        }
+
+        .ftf-timer-yellow {
+            color: #FFC107 !important;
+        }
+
+        .ftf-timer-red {
+            color: #F44336 !important;
         }
     `);
 
