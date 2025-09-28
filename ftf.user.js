@@ -268,6 +268,7 @@
 
     function processTargetList(url, callback) {
         const apiUrl = url || `https://api.torn.com/v2/user/list?cat=Targets&striptags=true&limit=50&sort=ASC&key=${apiKey}`;
+        console.log("[FTF] Fetching target list from:", apiUrl);
 
         GM_xmlhttpRequest({
             method: "GET",
@@ -280,15 +281,25 @@
                     return callback(null);
                 }
 
-                const targets = Object.values(data.targets || {});
+                const targets = data.list || [];
                 const suitableTargets = targets.filter(user => user.level <= maxLevel && user.status.state === "Okay");
 
                 filterAndSelectTarget(suitableTargets).then(targetId => {
                     if (targetId) {
+                        console.log(`[FTF] Suitable target found: ${targetId}. Stopping search.`);
                         openTargetPage(targetId);
                         return callback(targetId);
                     }
-                    return callback(null);
+
+                    const nextUrl = data._metadata?.links?.next;
+
+                    if (nextUrl) {
+                        console.log("[FTF] No suitable target on this page. Fetching next page...");
+                        processTargetList(nextUrl, callback);
+                    } else {
+                        console.log("[FTF] No suitable target found after checking all pages.");
+                        return callback(null);
+                    }
                 });
             },
             onerror(error) {
