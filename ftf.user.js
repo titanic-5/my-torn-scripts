@@ -267,7 +267,7 @@
     }
 
     function processTargetList(url, callback) {
-        const apiUrl = url || `https://api.torn.com/user/?selections=targets&key=${apiKey}`;
+        const apiUrl = url || `https://api.torn.com/v2/user/list?cat=Targets&striptags=true&limit=50&sort=ASC&key=${apiKey}`;
 
         GM_xmlhttpRequest({
             method: "GET",
