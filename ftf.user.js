@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Faction Target Finder
-// @version      1.0.7
+// @version      1.0.8
 // @namespace    http://tampermonkey.net/
 // @description  Adds a button to the top of the page that opens a live raid target from the faction list.
 // @author       Omanpx [1906686], Titanic_ [2968477]
@@ -24,7 +24,7 @@
     const NO_API_MAX_ID = 3100000;
     // End of configurable
 
-    let facIDs, maxLevel, apiKey, attackLink, newTab, randTarget, randFaction, ffScouterApiKey, maxStats, db;
+    let facIDs, maxLevel, apiKey, attackLink, newTab, randTarget, randFaction, ffScouterApiKey, maxStats, minStats, db;
     const DB_NAME = 'FTF_Cache';
     const STORE_NAME = 'ff_stats';
     const DB_VERSION = 1;
@@ -153,13 +153,14 @@
 
         maxLevel = localStorage.getItem('FTF_LEVEL') || 100;
         apiKey = localStorage.getItem('FTF_API') || null;
-        attackLink = localStorage.getItem('FTF_PROFILE') === 'true'; // Default to opening profile
-        newTab = localStorage.getItem('FTF_NEWTAB') === 'true'; // Default to opening in new tab
+        attackLink = localStorage.getItem('FTF_PROFILE') === 'true';
+        newTab = localStorage.getItem('FTF_NEWTAB') === 'true';
         randFaction = localStorage.getItem('FTF_RAND_FACTION') === 'true';
         randTarget = localStorage.getItem('FTF_RAND_TARGET') === 'true';
 
         ffScouterApiKey = localStorage.getItem('FTF_FF_API') || '';
         maxStats = parseSuffixedNumber(localStorage.getItem('FTF_MAX_STATS'));
+        minStats = parseSuffixedNumber(localStorage.getItem('FTF_MIN_STATS'));
     }
 
     function promptAPIKey() {
@@ -168,33 +169,36 @@
             localStorage.setItem('FTF_API', key);
             init();
         } else {
-            alert('No valid API key entered!');
+            alert('No valid API key entered! Search cancelled.');
         }
     }
 
     function changeSettings() {
-        const newApiKey = document.querySelector('#ftf-api').value;
+        const newApiKey = document.querySelector('#ftf-api').value.trim();
         const newLevel = document.querySelector('#ftf-max-level').value;
         const newProfile = document.querySelector('#ftf-profile').checked;
         const newNewTab = document.querySelector('#ftf-newtab').checked;
         const newRandFaction = document.querySelector('#ftf-random-faction').checked;
         const newRandTarget = document.querySelector('#ftf-random-target').checked;
-        const newFFApiKey = document.querySelector('#ftf-ff-api').value;
+        const newFFApiKey = document.querySelector('#ftf-ff-api').value.trim();
         const newMaxStats = document.querySelector('#ftf-max-stats').value;
+        const newMinStats = document.querySelector('#ftf-min-stats').value;
 
         localStorage.setItem('FTF_PROFILE', newProfile);
         localStorage.setItem('FTF_NEWTAB', newNewTab);
         localStorage.setItem('FTF_RAND_FACTION', newRandFaction);
         localStorage.setItem('FTF_RAND_TARGET', newRandTarget);
         localStorage.setItem('FTF_FACTIONS', facIDs.join(','));
+        localStorage.setItem('FTF_API', newApiKey);
         localStorage.setItem('FTF_FF_API', newFFApiKey);
         localStorage.setItem('FTF_MAX_STATS', newMaxStats);
+        localStorage.setItem('FTF_MIN_STATS', newMinStats);
 
-        if (newApiKey && newApiKey.trim() !== '') localStorage.setItem('FTF_API', newApiKey);
+        /*if (newApiKey && newApiKey.trim() !== '') localStorage.setItem('FTF_API', newApiKey);
         else {
             alert('Invalid API key entered!');
             return;
-        }
+        }*/
 
         if (newLevel >= 0 && newLevel <= 100) localStorage.setItem('FTF_LEVEL', newLevel);
         else {
@@ -228,12 +232,13 @@
     async function filterAndSelectTarget(potentialTargets) {
         if (potentialTargets.length === 0) return null;
 
-        if (!maxStats || maxStats <= 0 || !ffScouterApiKey) {
+        const useStatFilter = ffScouterApiKey && (maxStats > 0 || minStats > 0);
+
+        if (!useStatFilter) {
             const target = randTarget ? potentialTargets[Math.floor(Math.random() * potentialTargets.length)] : potentialTargets[0];
             return target.id || target;
         }
 
-        //console.log(`[FTF] Stat filtering ${potentialTargets.length} potential targets (max stats: ${maxStats.toLocaleString()})`);
         const targetIds = potentialTargets.map(t => t.id || t);
 
         try {
@@ -241,7 +246,7 @@
             const idsToFetch = targetIds.filter(id => !cachedStats[id]);
 
             if (idsToFetch.length > 0) {
-                console.log(`[FTF] Fetching ${idsToFetch.length} users from FFScouter.`);
+                console.log(`[FTF] Fetching stats for ${idsToFetch.length} users from FFScouter.`);
                 const fetchedStats = await fetchFFScouterStats(idsToFetch);
                 if (fetchedStats.length > 0) await saveStatsToDB(fetchedStats);
                 fetchedStats.forEach(data => cachedStats[data.player_id] = { stats: data });
@@ -250,11 +255,15 @@
             const finalTargets = potentialTargets.filter(target => {
                 const id = target.id || target;
                 const statInfo = cachedStats[id];
+
                 if (!statInfo || !statInfo.stats || statInfo.stats.bs_estimate === undefined) return true;
-                return statInfo.stats.bs_estimate <= maxStats;
+
+                const estimate = statInfo.stats.bs_estimate;
+                const passesMax = maxStats > 0 ? estimate <= maxStats : true;
+                const passesMin = minStats > 0 ? estimate >= minStats : true;
+                return passesMax && passesMin;
             });
 
-            //console.log(`[FTF] After stat filtering, ${finalTargets.length} targets remain.`);
             if (finalTargets.length === 0) return null;
 
             const finalTarget = randTarget ? finalTargets[Math.floor(Math.random() * finalTargets.length)] : finalTargets[0];
@@ -316,7 +325,7 @@
         }
 
         if (checked.size >= facIDs.length) {
-            //console.log("[FTF] No players met the conditions in any faction. Using failsafe random target.");
+            console.log("[FTF] No players met the conditions in any faction. Using failsafe random target.");
             openRandomNoApiTarget();
             return;
         }
@@ -342,10 +351,7 @@
                 if (potentialTargets && potentialTargets.length > 0) {
                     filterAndSelectTarget(potentialTargets).then(targetId => {
                         if (targetId) openTargetPage(targetId);
-                        else {
-                            //console.log(`[FTF] No targets passed stat filter in faction ${facIDs[index]}. Moving on.`);
-                            processUrls(index + 1, checked);
-                        }
+                        else processUrls(index + 1, checked);
                     });
                 } else {
                     processUrls(index + 1, checked);
@@ -381,16 +387,33 @@
 
     function openRandomNoApiTarget() {
         const randomID = Math.floor(Math.random() * (NO_API_MAX_ID - NO_API_MIN_ID + 1)) + NO_API_MIN_ID;
-        //console.log(`[FTF] Opening random (no-API) target: ${randomID}`);
         openTargetPage(randomID);
+    }
+
+    function toggleContainer() {
+        const container = document.querySelector('.ftf-container');
+        const toggleBtn = document.querySelector('.ftf-toggle-btn');
+        if (!container || !toggleBtn) return;
+        const isCollapsed = container.classList.toggle('ftf-collapsed');
+        localStorage.setItem('FTF_COLLAPSED', isCollapsed);
+        toggleBtn.textContent = isCollapsed ? '<' : '>';
     }
 
     const findBtn = createButton('Find Target', 'ftf-btn', findTarget);
     const chainSaveBtn = createButton('Chain Save', 'ftf-chain-save', openRandomNoApiTarget);
     const settBtn = createButton('Settings', 'ftf-settings', toggleSettings);
+    const toggleBtn = createButton('>', 'ftf-toggle-btn', toggleContainer);
+    const buttonWrapper = createDiv('ftf-button-wrapper');
+    buttonWrapper.append(chainSaveBtn, findBtn, settBtn);
+
     const container = createDiv('ftf-container');
-    container.append(chainSaveBtn, findBtn, settBtn);
+    container.append(toggleBtn, buttonWrapper);
     document.body.appendChild(container);
+
+    if (localStorage.getItem('FTF_COLLAPSED') === 'true') {
+        container.classList.add('ftf-collapsed');
+        toggleBtn.textContent = '<';
+    }
 
     let settingsModal;
     createSettingsModal();
@@ -409,7 +432,7 @@
             parent.append(tempDiv);
         };
 
-        const { input: apiKeyInput, label: apiKeyLabel } = createInput('ftf-api', "API Key (Limited)", apiKey, "text");
+        const { input: apiKeyInput, label: apiKeyLabel } = createInput('ftf-api', "API Key (Limited)", apiKey || '', "text");
         appendElements(modalBody, apiKeyLabel, apiKeyInput);
 
         const { input: ffApiInput, label: ffApiLabel } = createInput('ftf-ff-api', "FFScouter Key", ffScouterApiKey, "text");
@@ -418,7 +441,10 @@
         const { input: maxInput, label: maxLabel } = createInput('ftf-max-level', "Max Level", maxLevel, "number");
         appendElements(modalBody, maxLabel, maxInput);
 
-        const { input: maxStatsInput, label: maxStatsLabel } = createInput('ftf-max-stats', "Max Stats (k,m,b...)", localStorage.getItem('FTF_MAX_STATS') || maxStats, "text");
+        const { input: minStatsInput, label: minStatsLabel } = createInput('ftf-min-stats', "Min Stats (k,m,b)", localStorage.getItem('FTF_MIN_STATS') || minStats, "text");
+        appendElements(modalBody, minStatsLabel, minStatsInput);
+
+        const { input: maxStatsInput, label: maxStatsLabel } = createInput('ftf-max-stats', "Max Stats (k,m,b)", localStorage.getItem('FTF_MAX_STATS') || maxStats, "text");
         appendElements(modalBody, maxStatsLabel, maxStatsInput);
 
         const addFactionWrapper = createDiv('ftf-settings-row');
@@ -447,7 +473,6 @@
         const factionListRow = createDiv('ftf-settings-row');
         factionListRow.append(factionListContainer);
         modalBody.append(factionListRow);
-
 
         function renderFactionList() {
             factionListContainer.innerHTML = '';
@@ -482,7 +507,6 @@
 
         const { checkbox: randomTCheckbox, label: randomTLabel } = createCheckbox('ftf-random-target', "Select random target from list?", randTarget);
         appendElements(modalBody, randomTCheckbox, randomTLabel);
-
 
         const buttonContainer = createDiv('ftf-modal-buttons');
         const saveBtn = createButton('Save', 'ftf-save', changeSettings);
@@ -556,15 +580,38 @@
 
     addGlobalStyle(`
         .ftf-container {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
+            display: grid;
+            grid-template-columns: auto auto;
+            gap: 0;
             position: fixed;
             top: 40%;
             right: 0;
             z-index: 9999;
             background-color: transparent;
             border-radius: 5px;
+            transition: right 0.3s ease-in-out;
+        }
+
+        .ftf-button-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .ftf-container.ftf-collapsed .ftf-button-wrapper {
+            display: none;
+        }
+
+        .ftf-toggle-btn {
+            border: 1px solid #666;
+            margin-right: 3px;
+            color: #ccc;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .ftf-toggle-btn:hover {
+            background: #555;
         }
 
         .ftf-btn,
@@ -620,7 +667,7 @@
             background: #111;
             border-radius: 8px;
             max-width: 450px;
-            max-height: 80vh;
+            max-height: 85vh;
             display: flex;
             flex-direction: column;
             overflow: hidden;
@@ -649,6 +696,7 @@
         #ftf-ff-api,
         #ftf-max-level,
         #ftf-max-stats,
+        #ftf-min-stats,
         #ftf-add-faction-id {
             background-color: transparent;
             border: 1px solid #444;
@@ -821,9 +869,11 @@
             0% {
                 background-color: rgba(244, 67, 54, 0.3);
             }
+
             50% {
                 background-color: rgba(244, 67, 54, 0.6);
             }
+
             100% {
                 background-color: rgba(244, 67, 54, 0.3);
             }
