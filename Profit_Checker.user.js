@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Profit Checker
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Adds a button in sidebar to profit check.
 // @author       Titanic_
 // @match        https://www.torn.com/*
@@ -655,9 +655,7 @@
             const checkedListings = (await Promise.all(bazaarChecks)).filter(Boolean);
             checkedListings.sort((a, b) => b.profit - a.profit);
 
-            const counter = $("#pc-counter");
             if (checkedListings.length === 0) {
-                if (counter) counter.textContent = parseInt(counter.textContent) + 1;
                 table.innerHTML = `<tr><td colspan="5" class="no-listings-message">No listings found matching criteria.</td></tr>`;
             } else {
                 table.innerHTML = checkedListings.map(l => `
@@ -678,7 +676,6 @@
     }
 
     async function checkAllProfits() {
-        $("#pc-counter").textContent = "0";
         $("#pc-start").disabled = true;
 
         let multiBazaar = $("#pc-multi-bazaar");
