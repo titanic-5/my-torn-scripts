@@ -972,14 +972,12 @@ ul#categoriesList li#pokedex-tab.ui-state-active a.pokedex-category-icon {
 .poketorn-blackout-banner {
     background-color: #8b0000;
     color: #fff;
-    padding: 10px;
+    padding: 5px;
     text-align: center;
     font-size: 16px;
     position: sticky;
     top: 0;
-    z-index: 9999;
-    border-bottom: 3px solid #ff5555;
-    animation: pulse-red 2s infinite;
+    z-index: 999999;
 }
 
 @keyframes pulse-red {
