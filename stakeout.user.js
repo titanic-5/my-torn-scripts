@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    http://tampermonkey.net/
-// @version      2.6.3
+// @version      2.6.4
 // @description  Stakeout factions or individual users
 // @author       Titanic_
 // @match        https://www.torn.com/profiles.php?XID=*
@@ -111,7 +111,7 @@ function formatTimeDescription(baseDescription, remainingSeconds) {
 		else newTimeValue = `${s}s`;
 	}
 	if (match?.[0]) return baseDescription.replace(match[0], `${match[1]}${newTimeValue}`);
-	return `${baseDescription} (${newTimeValue})`;
+	return `${baseDescription}`;
 }
 
 function isApiKeySet() {
@@ -290,6 +290,48 @@ function formatSpyTimestamp(unixTimestamp) {
 	const dMin = Math.floor(dS / 60);
 	if (dMin > 0) return `~${dMin}m ago`;
 	return `~${dS}s ago`;
+}
+
+function rgbToHex(r, g, b) {
+    return (
+        "#" +
+        ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase()
+    );
+}
+
+function getFairFightColour(value) {
+    let r, g, b;
+
+    if (value <= 1) {
+        r = 0x28;
+        g = 0x28;
+        b = 0xc6;
+    } else if (value <= 3) {
+        const t = (value - 1) / 2;
+        r = 0x28;
+        g = Math.round(0x28 + (0xc6 - 0x28) * t);
+        b = Math.round(0xc6 - (0xc6 - 0x28) * t);
+    } else if (value <= 5) {
+        const t = (value - 3) / 2;
+        r = Math.round(0x28 + (0xc6 - 0x28) * t);
+        g = Math.round(0xc6 - (0xc6 - 0x28) * t);
+        b = 0x28;
+    } else {
+        r = 0xc6;
+        g = 0x28;
+        b = 0x28;
+    }
+
+    return rgbToHex(r, g, b);
+}
+
+function getContrastColour(hex) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+
+    const brightness = r * 0.299 + g * 0.587 + b * 0.114;
+    return brightness > 126 ? "black" : "white";
 }
 
 function createApiErrorDisplay(serviceName, errorMessage, errorId) {
@@ -474,6 +516,73 @@ function createMemberElement(member, categoryName) {
 	});
 
 	const memberInfoContainer = createStyledElement("div", { display: "flex", flexDirection: "column", flexGrow: 1, marginRight: "8px" });
+
+    const sYata = member.yataSpyData;
+    const sFFS = member.ffscouterSpyData;
+
+    const yataTotalValue = sYata?.total > 0 ? sYata.total : null;
+    const ffsFFValue = sFFS?.fair_fight !== null && sFFS.fair_fight !== undefined && sFFS.fair_fight > 0 ? sFFS.fair_fight : null;
+    const ffsBSEstimateValue = sFFS?.bs_estimate !== null && sFFS.bs_estimate !== undefined && sFFS.bs_estimate > 0 ? sFFS.bs_estimate : null;
+
+    const yataDisplay = yataTotalValue ? formatStatValue(yataTotalValue) : null;
+    const ffsEstimateDisplay = ffsBSEstimateValue ? formatStatValue(ffsBSEstimateValue) : null;
+
+    if (ffsEstimateDisplay || yataDisplay) {
+        const coloredSpanStyles = {
+            padding: "1px 4px",
+            borderRadius: "3px",
+            fontWeight: "bold",
+            display: "inline-block",
+            whiteSpace: "nowrap",
+            lineHeight: "1.2",
+        };
+        const plainSpanStyles = {
+            fontWeight: "bold",
+            whiteSpace: "nowrap",
+            lineHeight: "1.2",
+        };
+
+        let contentParts = [];
+
+        if (ffsEstimateDisplay) {
+            let ffColor = '#555';
+            let ffContrast = 'white';
+
+            if (ffsFFValue) {
+                ffColor = getFairFightColour(ffsFFValue);
+                ffContrast = getContrastColour(ffColor);
+            }
+
+            const ffsSpan = createStyledElement('span', {
+                ...coloredSpanStyles,
+                backgroundColor: ffColor,
+                color: ffContrast,
+            }, { textContent: `FFS: ${ffsEstimateDisplay}` });
+            contentParts.push(ffsSpan.outerHTML);
+        }
+
+        if (yataDisplay) {
+            const yataSpan = createStyledElement('span', {
+                ...plainSpanStyles,
+                color: '#76D7C4',
+            }, { textContent: `YATA: ${yataDisplay}` });
+            contentParts.push(yataSpan.outerHTML);
+        }
+
+        const separator = '<span style="color: #666; margin: 0 4px; font-weight: normal;">|</span>';
+
+        const spySummaryRow = createStyledElement("div", {
+            fontSize: "0.85em",
+            marginBottom: "4px",
+            display: "flex",
+            alignItems: "center",
+        }, {
+            innerHTML: contentParts.join(separator)
+        });
+
+        memberInfoContainer.appendChild(spySummaryRow);
+    }
+
 	const onlineStatusIcon = createStyledElement("span", {
 		width: "10px",
 		height: "10px",
