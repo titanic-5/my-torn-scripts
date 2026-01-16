@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Anti-Zerg (Attack loader links)
 // @namespace   tampermonkey.com.eu.net.uk
-// @version     1.1
+// @version     1.2
 // @description makes usernames on the attack loader clickable to their attack pages.
 // @author      Titanic_ (based on intercept-link by seintz [2460991] (based on original by finally [2060206]) )
 // @run-at      document-start
@@ -85,5 +85,5 @@
             const observer = new MutationObserver(processDOM);
             observer.observe(document.body, { childList: true, subtree: true });
         }
-    }, 100);
+    }, 500);
 })();
