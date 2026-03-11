@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Ranked War Member Status
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  Displays online, offline, and idle counts in faction wars
-// @author       You
+// @author       Titanic_
 // @match        https://www.torn.com/factions.php*
 // @grant        none
 // ==/UserScript==
@@ -41,8 +41,8 @@
         let existingDisplay = document.getElementById("faction-status-display");
         if (existingDisplay) {
             existingDisplay.innerHTML = `
-                <div><strong>Enemy:</strong> 🟢 ${eOnline} - 🟡 ${eIdle} - 🔴 ${eOffline}</div><br/>
-                <div><strong>Friendly:</strong> 🟢 ${yOnline} - 🟡 ${yIdle} - 🔴 ${yOffline}</div>
+                <div>🟢 ${eOnline} 🟡 ${eIdle} 🔴 ${eOffline}</div>
+                <div>🟢 ${yOnline} 🟡 ${yIdle} 🔴 ${yOffline}</div>
             `;
             return;
         }
@@ -50,6 +50,9 @@
         let statusDiv = document.createElement("div");
         statusDiv.id = "faction-status-display";
         statusDiv.style.cssText = `
+            display: flex;
+            flex-direction: row;
+            justify-content: space-evenly;
             margin-top: 10px;
             padding: 15px;
             background: rgba(0, 0, 0, 0.7);
@@ -60,8 +63,8 @@
         `;
 
         statusDiv.innerHTML = `
-            <div><strong>Enemy:</strong> 🟢 ${eOnline} - 🟡 ${eIdle} - 🔴 ${eOffline}</div><br/>
-            <div><strong>Friendly:</strong> 🟢 ${yOnline} - 🟡 ${yIdle} - 🔴 ${yOffline}</div>
+            <div>🟢 ${eOnline} 🟡 ${eIdle} 🔴 ${eOffline}</div>
+            <div>🟢 ${yOnline} 🟡 ${yIdle} 🔴 ${yOffline}</div>
         `;
 
         factionNamesDiv.appendChild(statusDiv);
