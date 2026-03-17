@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    titanics.stakeout.script
-// @version      2.7.0
+// @version      2.7.1
 // @description  Stakeout factions or individual users
 // @author       Titanic_
 // @match        https://www.torn.com/*
@@ -150,7 +150,13 @@ function isCacheValid(cachedItem, duration = SPY_CACHE_DURATION_MS) {
     return cachedItem?.timestamp && Date.now() - cachedItem.timestamp < duration;
 }
 
-function getActivePlayerInfo() {
+async function getActivePlayerInfo() {
+    const cached = localStorage.getItem("stakeoutActivePlayer");
+    if (cached) {
+        activePlayer = JSON.parse(cached);
+        return;
+    }
+
     const userLink = document.querySelector('a.menu-value___gLaLR[href*="XID="]');
     if (userLink) {
         const name = userLink.textContent.trim();
@@ -158,7 +164,17 @@ function getActivePlayerInfo() {
         const id = urlParams.get('XID');
         if (name && id) {
             activePlayer = { id, name };
-            console.log(`[Stakeout] Active player identified: ${activePlayer.name} [${activePlayer.id}]`);
+            localStorage.setItem("stakeoutActivePlayer", JSON.stringify(activePlayer));
+            return;
+        }
+    }
+
+    if (isApiKeySet()) {
+        const data = await fetchApi("user/", "basic");
+        if (data && data.player_id && data.name) {
+            activePlayer = { id: data.player_id.toString(), name: data.name };
+            localStorage.setItem("stakeoutActivePlayer", JSON.stringify(activePlayer));
+            console.log(`[Stakeout] Active player identified via API: ${activePlayer.name}`);
             return;
         }
     }
@@ -1598,6 +1614,7 @@ function addFactionStakeoutElements(factionPageElement, factionID) {
             if (newKey !== null) {
                 currentApiKey = newKey.trim() || API_KEY_PLACEHOLDER;
                 localStorage.setItem("stakeoutUserApiKey", currentApiKey === API_KEY_PLACEHOLDER ? "" : currentApiKey);
+                localStorage.removeItem("stakeoutActivePlayer");
                 if (currentApiKey === API_KEY_PLACEHOLDER) localStorage.removeItem("stakeoutUserApiKey");
                 previouslyOkayIDs.clear();
                 apiKeyButton.textContent = isApiKeySet() ? "Change Torn API Key" : "Set Torn API Key";
@@ -1751,6 +1768,7 @@ function observe() {
                 const factionID = new URLSearchParams(window.location.search).get("ID");
                 if (factionID) {
                     addFactionStakeoutElements(factionProfileElement, factionID);
+                    startDibsPolling();
                     if (!document.getElementById(MAIN_CONTAINER_ID)) initialFactionLoad(factionID);
                 }
             }
