@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    titanics.stakeout.script
-// @version      2.7.2
+// @version      2.7.3
 // @description  Stakeout factions or individual users
 // @author       Titanic_
 // @match        https://www.torn.com/*
@@ -169,6 +169,18 @@ async function getActivePlayerInfo() {
     }
   }
 
+  const hiddenInput = document.getElementById("torn-user");
+  if (hiddenInput && hiddenInput.value) {
+    try {
+      const userData = JSON.parse(hiddenInput.value);
+      if (userData.id && userData.playername) {
+        activePlayer = { id: userData.id.toString(), name: userData.playername };
+        localStorage.setItem("stakeoutActivePlayer", JSON.stringify(activePlayer));
+        return;
+      }
+    } catch {}
+  }
+
   if (isApiKeySet()) {
     const data = await fetchApi("user/", "basic");
     if (data && data.player_id && data.name) {
@@ -178,8 +190,10 @@ async function getActivePlayerInfo() {
       return;
     }
   }
+  
   console.warn("[Stakeout] Could not identify active player.");
 }
+
 function startDibsPolling() {
   if (dibsSyncIntervalId) clearInterval(dibsSyncIntervalId);
   if (dibsAnimationIntervalId) clearInterval(dibsAnimationIntervalId);
