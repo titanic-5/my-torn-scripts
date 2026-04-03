@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Replace Edu Timer
-// @namespace    http://tampermonkey.net/
+// @namespace    titanic-5.uk
 // @version      1.1
 // @description  Convert to hours
-// @author       Titanic_
+// @author       Titanic_ [2968477]
 // @match        *://*.torn.com/*
 // @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/edu_timer.user.js
 // @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/edu_timer.user.js

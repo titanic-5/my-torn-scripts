@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         Profit Checker
-// @namespace    http://tampermonkey.net/
+// @namespace    titanic-5.uk
 // @version      1.1
-// @description  Adds a button in sidebar to profit check.
-// @author       Titanic_
+// @description  Adds a button in sidebar to find profitable stuff in tornw3b
+// @author       Titanic_ [2968477]
 // @match        https://www.torn.com/*
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Profit_Checker.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Profit_Checker.user.js
 // @grant        GM_addStyle
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue

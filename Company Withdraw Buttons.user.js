@@ -1,21 +1,22 @@
 // ==UserScript==
 // @name         Company Withdraw Buttons
-// @namespace    Titanic_
+// @namespace    titanic-5.uk
 // @version      2.0
 // @description  Adds buttons to remove at million $ intervals to the vault page to make it easier to manage money in company vault.
-// @license      MIT
-// @author       Titanic_
+// @author       Titanic_ [2968477]
 // @match        https://www.torn.com/companies.php*
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Company%20Withdraw%20Buttons.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Company%20Withdraw%20Buttons.user.js
 // @grant        none
 // ==/UserScript==
 
-let playMoney = 10000000; // Set this for magic button
+let playMoney = 10_000_000; // Set this for magic button
 
 // Feel free to add to or change these
 const BUTTONS = [
-    { label: "-1m", amount: 1000000 },
-    { label: "-5m", amount: 5000000 },
-    { label: "-10m", amount: 10000000 }
+    { label: "-1m", amount: 1_000_000 },
+    { label: "-5m", amount: 5_000_000 },
+    { label: "-10m", amount: 10_000_000 }
 ];
 
 function addElements() {

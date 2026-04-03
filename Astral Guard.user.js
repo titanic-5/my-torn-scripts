@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         Astral Guard Warning
-// @namespace    http://tampermonkey.net/
+// @namespace    titanic-5.uk
 // @version      1.0
 // @description  If Astral Guard effect is active, shows warning (minion/maol invulnerability)
-// @author       Titanic_
+// @author       Titanic_ [2968477]
 // @match        https://www.torn.com/loader.php?sid=attack*
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Astral%20Guard.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Astral%20Guard.user.js
 // @grant        none
 // ==/UserScript==
 

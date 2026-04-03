@@ -1,11 +1,12 @@
 // ==UserScript==
-// @name         Torn - Riggers and Minors
-// @namespace    Titanic
+// @name         Riggers and Minors
+// @namespace    titanic-5.uk
 // @version      1.1
 // @description  Highlight oil riggers on Torn
-// @author       Titanic
+// @author       Titanic_ [2968477]
 // @match        https://www.torn.com/page.php?sid=UserList*
-// @icon         https://www.google.com/s2/favicons?sz=64&domain=torn.com
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Torn%20-%20Riggers%20and%20Minors.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Torn%20-%20Riggers%20and%20Minors.js
 // @require      https://gist.github.com/raw/2625891/waitForKeyElements.js
 // @grant        none
 // ==/UserScript==
@@ -26,7 +27,7 @@ function checkJob(element) {
     const titleAttr = parentElement.getAttribute('title');
     if(!titleAttr) return;
 
-    if(titleAttr.includes("Oil Rig")) {
+    if(titleAttr.includes("Oil Rig")) { // Add `|| titleAttr.includes(...)` for additional checks 
         element[0].style.backgroundColor = "rebeccapurple";
     }
 }

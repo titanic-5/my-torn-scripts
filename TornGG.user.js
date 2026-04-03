@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         Torn.gg
-// @namespace    http://tampermonkey.net/
+// @namespace    titanic-5.uk
 // @version      1.0
 // @description  Dark mode toggle
-// @author       You
-// @license      MIT
+// @author       Titanic_ [2968477]
 // @match        https://torn.gg/*
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/TornGG.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/TornGG.user.js
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==

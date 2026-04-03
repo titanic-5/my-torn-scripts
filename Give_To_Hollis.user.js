@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         Give it to Hollis
-// @namespace    http://tampermonkey.net/
-// @version      2025-02-26
-// @description  try to take over the world!
-// @author       You
+// @namespace    titanic-5.uk
+// @version      1.0
+// @description  title
+// @author       Titanic_ [2968477]
 // @match        https://www.torn.com/properties.php*
 // @match        https://www.torn.com/item.php*
-// @icon         https://www.google.com/s2/favicons?sz=64&domain=torn.com
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Give_To_Hollis.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Give_To_Hollis.user.js
 // @grant        none
 // ==/UserScript==
 

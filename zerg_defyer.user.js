@@ -1,14 +1,14 @@
 // ==UserScript==
 // @name        Anti-Zerg (Attack loader links)
-// @namespace   tampermonkey.com.eu.net.uk
+// @namespace   titanic-5.uk
 // @version     1.2
 // @description makes usernames on the attack loader clickable to their attack pages.
-// @author      Titanic_ (based on intercept-link by seintz [2460991] (based on original by finally [2060206]) )
+// @author      Titanic_ [2968477]
 // @run-at      document-start
 // @match       https://www.torn.com/loader.php?sid=attack*
 // @require     https://unpkg.com/xhook@1.6.2/dist/xhook.min.js
-// @updateURL   https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/zerg_defyer.user.js
 // @downloadURL https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/zerg_defyer.user.js
+// @updateURL   https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/zerg_defyer.user.js
 // @grant       GM.addStyle
 // ==/UserScript==
 

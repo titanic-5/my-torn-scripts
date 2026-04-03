@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Attack Log Highlighter
-// @namespace    Titanic_
+// @namespace    titanic-5.uk
 // @version      1.3
 // @description  Highlight special events in attack logs
-// @author       Titanic_
+// @author       Titanic_ [2968477]
 // @match        https://www.torn.com/loader.php?sid=attackLog*
 // @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/log_highlighter.user.js
 // @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/log_highlighter.user.js

@@ -1,13 +1,15 @@
 // ==UserScript==
 // @name         Company - Max $
-// @namespace    Titanic_
+// @namespace    titanic-5.uk
 // @version      1.0
 // @description  Automatically maxes out the deposit input in a company vault
-// @license      MIT
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/companies.php*
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Company%20-%20Max%20-.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Company%20-%20Max%20-.user.js
 // @grant        window.onurlchange
 // ==/UserScript==
+
 const observer = new MutationObserver(() => {
     if (window.location.href.includes("option=funds")) {
         inputCheck();

@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         Display Case - Move to Top/Bottom
-// @namespace    http://tampermonkey.net/
+// @namespace    titanic-5.uk
 // @version      1.0
 // @description  Adds buttons to move to top or bottom of list
-// @author       Titanic_
+// @author       Titanic_ [2968477]
 // @match        https://www.torn.com/displaycase.php*
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/display_case-buttons.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/display_case-buttons.user.js
 // @grant        none
 // ==/UserScript==
 

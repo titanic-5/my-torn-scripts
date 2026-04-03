@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         Torn Bazaar Auto-Fill Search
-// @namespace    http://tampermonkey.net/
+// @namespace    titanic-5.uk
 // @version      1.0
-// @description  Auto-fills search field with item name in bazaars.
-// @author       Titanic
+// @description  Auto-fills search field with item name in bazaars
+// @author       Titanic_ [2968477]
 // @match        https://www.torn.com/bazaar.php?userId=*
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/bazaar-search+fill-max.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/bazaar-search+fill-max.user.js
 // @grant        none
 // ==/UserScript==
 

@@ -1,8 +1,9 @@
 // ==UserScript==
 // @name         Torn - Property Name Editor
-// @namespace    Titanic
+// @namespace    titanic-5.uk
 // @version      1.0
 // @description  Add a pencil icon to edit nicknames for properties.
+// @author       Titanic_ [2968477]
 // @match        https://www.torn.com/properties.php
 // @require      https://gist.github.com/raw/2625891/waitForKeyElements.js
 // @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/propertyRename.user.js

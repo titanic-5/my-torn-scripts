@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         Torn - One Click Revive
-// @namespace    Titanic_
+// @namespace    titanic-5.uk
 // @version      1.0
-// @description  title
+// @description  makes revives a single click
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/hospitalview.php*
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/one_click_revive.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/one_click_revive.user.js
 // @grant        none
 // ==/UserScript==
 

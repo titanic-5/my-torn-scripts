@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         Bazaar - Remove All
-// @namespace    http://tampermonkey.net/
+// @namespace    titanic-5.uk
 // @version      1.0
 // @description  Adds a remove all button to bazaar page
-// @author       You
+// @author       Titanic_ [2968477]
 // @match        https://www.torn.com/bazaar.php*
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/bazaar-remove_all.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/bazaar-remove_all.user.js
 // @grant        none
 // ==/UserScript==
 

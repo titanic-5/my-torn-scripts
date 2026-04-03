@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         Display Case Checklist
-// @namespace    http://tampermonkey.net/
+// @namespace    titanic-5.uk
 // @version      1.0
-// @description  Title
-// @author       Titanic_
+// @description  Adds a button to the display case that shows all items you have and dont have
+// @author       Titanic_ [2968477]
 // @match        https://www.torn.com/displaycase.php*
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Display%20Case%20Checklist.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Display%20Case%20Checklist.user.js
 // @require      https://gist.github.com/raw/2625891/waitForKeyElements.js
 // @grant        GM.xmlHttpRequest
 // @grant        GM_setValue
