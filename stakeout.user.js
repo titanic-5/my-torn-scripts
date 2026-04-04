@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Stakeout Script
-// @namespace    titanic-5.uk
-// @version      2.7.3
+// @namespace    titanics.stakeout.script
+// @version      2.7.4
 // @description  Stakeout factions or individual users
-// @author       Titanic_ [2968477]
+// @author       Titanic_
 // @match        https://www.torn.com/*
 // @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/stakeout.user.js
 // @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/stakeout.user.js
@@ -178,9 +178,10 @@ async function getActivePlayerInfo() {
         localStorage.setItem("stakeoutActivePlayer", JSON.stringify(activePlayer));
         return;
       }
-    } catch {}
+    } catch (e) {
+      console.warn("[Stakeout] Failed to parse torn-user hidden input", e);
+    }
   }
-
   if (isApiKeySet()) {
     const data = await fetchApi("user/", "basic");
     if (data && data.player_id && data.name) {
@@ -190,7 +191,6 @@ async function getActivePlayerInfo() {
       return;
     }
   }
-  
   console.warn("[Stakeout] Could not identify active player.");
 }
 
@@ -496,16 +496,23 @@ async function checkUserStatus(userID) {
 function formatStatValue(num) {
   if (num === null || num === undefined || num === -1) return "N/A";
   if (num === 0) return "0";
+
   const suffixes = ["", "k", "M", "B", "T", "Q"];
   let i = 0;
   let tempNum = Math.abs(num);
+
   while (tempNum >= 1000 && i < suffixes.length - 1) {
     tempNum /= 1000;
     i++;
   }
-  const precision = i >= 2 ? 0 : i === 1 && tempNum < 100 ? 1 : 0;
+
+  let precision;
+  if (i >= 2) precision = 1;
+  else if (i === 1 && tempNum < 100) precision = 1;
+  else precision = 0;
 
   let formattedNum = (num / Math.pow(1000, i)).toFixed(precision);
+
   return formattedNum.replace(/\.0+$/, "") + suffixes[i];
 }
 
