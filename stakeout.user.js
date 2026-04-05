@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    titanic-5.uk
-// @version      2.7.5
+// @version      2.7.6
 // @description  Stakeout factions or individual users
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/*
@@ -1364,7 +1364,7 @@ function updateFactionDisplay(memberStatusesToDisplay, factionID) {
     const { status, description } = member;
     let category = STATUS_CATEGORIES.OTHER;
     if (status === "Hospital")
-      category = description.toLowerCase().match(/hospital in|in a .* hospital/)
+      category = description.toLowerCase().match(/hospital in|in a .* hospital|in an .* hospital/)
         ? STATUS_CATEGORIES.HOSPITAL_ABROAD
         : STATUS_CATEGORIES.HOSPITAL_TORN;
     else if (status === "Traveling") category = STATUS_CATEGORIES.TRAVELING;
