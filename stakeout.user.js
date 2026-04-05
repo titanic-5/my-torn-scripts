@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    titanic-5.uk
-// @version      2.7.4
+// @version      2.7.5
 // @description  Stakeout factions or individual users
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/*
@@ -992,24 +992,56 @@ function createMemberElement(member, categoryName) {
 
     const separator = '<span style="color: #666; margin: 0 4px; font-weight: normal;">|</span>';
 
-    const spySummaryRow = createStyledElement(
+    const spySummaryRow = createStyledElement("div", {
+      fontSize: "0.85em",
+      marginBottom: "4px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      width: "100%",
+      paddingBottom: "4px",
+      borderBottom: "1px solid #444",
+    });
+
+    const statsContainer = createStyledElement(
       "div",
       {
-        fontSize: "0.85em",
-        marginBottom: "4px",
         display: "flex",
         alignItems: "center",
         flexWrap: "wrap",
         gap: "5px",
-        width: "100%",
-        paddingBottom: "4px",
-        borderBottom: "1px solid #444",
+        flex: "1",
       },
       {
         innerHTML: contentParts.join(separator),
       }
     );
 
+    const rightIconsContainer = createStyledElement("div", {
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      flexShrink: 0,
+    });
+
+    if (member.is_revivable === true) {
+      const reviveIcon = createStyledElement(
+        "span",
+        {
+          color: "#e74c3c",
+          cursor: "default",
+          fontSize: "1em",
+        },
+        {
+          textContent: "✚",
+          title: "Is revivable",
+        }
+      );
+
+      rightIconsContainer.appendChild(reviveIcon);
+    }
+
+    spySummaryRow.append(statsContainer, rightIconsContainer);
     contentContainer.appendChild(spySummaryRow);
   }
 
@@ -1397,7 +1429,7 @@ async function fetchMonitorAndUpdate(factionID, stakeoutCheckbox, isInitialCall 
     status: m.status.state,
     until: m.status.until || false,
     description: m.status.description,
-    is_revivable: m.status.is_revivable,
+    is_revivable: m.is_revivable,
     durationSeconds: (m.status.until - Math.floor(Date.now() / 1000) || 0) * (m.status.state === "Okay" ? 0 : 1),
     yataSpyData: currentYataSpies[m.id.toString()] || null,
     ffscouterSpyData: currentFFScouterSpies[m.id.toString()] || null,
