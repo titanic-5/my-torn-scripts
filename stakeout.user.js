@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    titanic-5.uk
-// @version      2.7.6
+// @version      2.7.7
 // @description  Stakeout factions or individual users
 // @author       Titanic_ [2968477]
-// @match        https://www.torn.com/*
+// @match        https://www.torn.com/profiles.php*
+// @match        https://www.torn.com/factions.php*
 // @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/stakeout.user.js
 // @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/stakeout.user.js
 // @grant        GM_xmlhttpRequest
