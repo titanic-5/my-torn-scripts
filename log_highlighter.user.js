@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         Attack Log Highlighter
 // @namespace    titanic-5.uk
-// @version      1.3
+// @version      1.4
 // @description  Highlight special events in attack logs
 // @author       Titanic_ [2968477]
-// @match        https://www.torn.com/loader.php?sid=attackLog*
+// @match        https://www.torn.com/page.php?sid=attackLog*
 // @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/log_highlighter.user.js
 // @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/log_highlighter.user.js
 // @grant        none
@@ -20,7 +20,7 @@
         'attacking-events-reloading',
         'attacking-events-standart-damage',
         'attacking-events-attack-win',
-        'attacking-events-leave'
+        'attacking-events-leave',
     ];
 
     const critClasses = [

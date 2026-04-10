@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name        Anti-Zerg (Attack loader links)
 // @namespace   titanic-5.uk
-// @version     1.2
+// @version     1.3
 // @description makes usernames on the attack loader clickable to their attack pages.
 // @author      Titanic_ [2968477]
 // @run-at      document-start
-// @match       https://www.torn.com/loader.php?sid=attack*
+// @match       https://www.torn.com/page.php?sid=attack*
 // @require     https://unpkg.com/xhook@1.6.2/dist/xhook.min.js
 // @downloadURL https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/zerg_defyer.user.js
 // @updateURL   https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/zerg_defyer.user.js
@@ -29,7 +29,7 @@
     const userMap = new Map();
 
     xhook.after(async (request, response) => {
-        if (!request.url.includes("/loader.php?sid=attackData")) return;
+        if (!request.url.includes("/page.php?sid=attackData")) return;
 
         try {
             const data = await response.clone().json();
@@ -70,7 +70,7 @@
     }
 
     function createAttackLink(userID, playerName) {
-        return `<a class="finally-ap-link" target="_blank" href="loader.php?sid=attack&user2ID=${userID}">${playerName}</a>`;
+        return `<a class="finally-ap-link" target="_blank" href="page.php?sid=attack&user2ID=${userID}">${playerName}</a>`;
     }
 
     function processDOM() {
