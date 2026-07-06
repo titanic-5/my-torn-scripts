@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stakeout Script
 // @namespace    titanic-5.uk
-// @version      2.7.7
+// @version      2.7.8
 // @description  Stakeout factions or individual users
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/profiles.php*
@@ -242,7 +242,7 @@ function updateDibsStaticUI() {
         attackBtn.style.backgroundColor = "#c0392b";
         attackBtn.style.cursor = "pointer";
         attackBtn.style.pointerEvents = "auto";
-        attackBtn.href = `https://www.torn.com/loader.php?sid=attack&user2ID=${userId}`;
+        attackBtn.href = `https://www.torn.com/page.php?sid=attack&user2ID=${userId}`;
         attackBtn.target = "_blank";
         attackBtn.title = "Attack User";
         attackBtn.onmouseover = () => (attackBtn.style.backgroundColor = "#a93226");
@@ -253,7 +253,7 @@ function updateDibsStaticUI() {
       attackBtn.style.backgroundColor = "#c0392b";
       attackBtn.style.cursor = "pointer";
       attackBtn.style.pointerEvents = "auto";
-      attackBtn.href = `https://www.torn.com/loader.php?sid=attack&user2ID=${userId}`;
+      attackBtn.href = `https://www.torn.com/page.php?sid=attack&user2ID=${userId}`;
       attackBtn.target = "_blank";
       attackBtn.title = "Attack User";
       attackBtn.onmouseover = () => (attackBtn.style.backgroundColor = "#a93226");
@@ -1243,7 +1243,7 @@ function createMemberElement(member, categoryName) {
   const attackButton = createActionButton(
     "⚔️",
     "Attack User",
-    `https://www.torn.com/loader.php?sid=attack&user2ID=${member.userID}`,
+    `https://www.torn.com/page.php?sid=attack&user2ID=${member.userID}`,
     "#c0392b",
     "#a93226",
     null,
