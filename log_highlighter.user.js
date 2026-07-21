@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Attack Log Highlighter
 // @namespace    titanic-5.uk
-// @version      1.4
+// @version      1.5
 // @description  Highlight special events in attack logs
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/page.php?sid=attackLog*
@@ -30,68 +30,65 @@
 
     function processElements(elements) {
         elements.forEach(element => {
+            if (element.dataset.highlighted) return;
+            element.dataset.highlighted = 'true';
+
             const classList = Array.from(element.classList);
             const attackingClass = classList.find(cls => cls.startsWith('attacking-events-'));
 
-            if (attackingClass) {
-                if (ignoreClasses.includes(attackingClass)) {
-                    return;
-                }
+            if (!attackingClass || ignoreClasses.includes(attackingClass)) {
+                return;
+            }
 
-                const box = document.createElement('span');
+            const box = document.createElement('span');
 
-                if (critClasses.includes(attackingClass)) {
-                    box.style.backgroundColor = 'red';
-                    box.textContent = 'crit';
-                } else {
-                    const className = attackingClass.replace('attacking-events-', '');
-                    box.style.backgroundColor = '#20a5e2';
-                    box.textContent = className;
-                }
+            if (critClasses.includes(attackingClass)) {
+                box.style.backgroundColor = 'red';
+                box.textContent = 'crit';
+            } else {
+                const className = attackingClass.replace('attacking-events-', '');
+                box.style.backgroundColor = '#20a5e2';
+                box.textContent = className;
+            }
 
-                box.style.display = 'inline-block';
-                box.style.color = 'white';
-                box.style.fontSize = '10px';
-                box.style.padding = '5px';
-                box.style.borderRadius = '5px';
-                box.style.marginLeft = '5px';
-                box.style.verticalAlign = 'middle';
-                box.style.whiteSpace = 'nowrap';
+            box.style.display = 'inline-block';
+            box.style.color = 'white';
+            box.style.fontSize = '10px';
+            box.style.fontWeight = 'bold';
+            box.style.padding = '2px 6px';
+            box.style.borderRadius = '4px';
+            box.style.marginRight = '6px';
+            box.style.verticalAlign = 'middle';
+            box.style.whiteSpace = 'nowrap';
 
+            const iconWrap = element.closest("[class*='iconWrap']") || element.parentNode;
+            if (iconWrap && iconWrap.parentNode) {
+                iconWrap.parentNode.insertBefore(box, iconWrap.nextSibling);
+            } else {
                 element.parentNode.insertBefore(box, element.nextSibling);
-
-                const message = element.parentNode.querySelector(".message");
-                if (message) {
-                    let width = parseFloat(window.getComputedStyle(message).width) - (box.offsetWidth + 5);
-                    message.style.width = width + "px";
-                }
             }
         });
     }
 
-    const initialElements = document.querySelectorAll("span[class*='attacking-events-']");
-    processElements(initialElements);
-
-    function delay(ms) {
-        return new Promise((resolve) => setTimeout(resolve, ms));
+    function scanAndProcess() {
+        const elements = document.querySelectorAll("span[class*='attacking-events-']");
+        processElements(elements);
     }
+
+    scanAndProcess();
 
     const observer = new MutationObserver(mutations => {
-        mutations.forEach(mutation => {
-            if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                mutation.addedNodes.forEach(async node => {
-                    if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('jscroll-added')) {
-                        await delay(500)
-                        const newElements = node.querySelectorAll("span[class*='attacking-events-']");
-                        processElements(newElements);
-                    }
-                });
+        let shouldScan = false;
+        for (const mutation of mutations) {
+            if (mutation.addedNodes.length > 0) {
+                shouldScan = true;
+                break;
             }
-        });
+        }
+        if (shouldScan) {
+            scanAndProcess();
+        }
     });
 
-    const logContainer = document.querySelector(".jscroll-inner");
-    if (logContainer) {
-        observer.observe(logContainer, { childList: true });
-    }
+    observer.observe(document.body, { childList: true, subtree: true });
 })();
