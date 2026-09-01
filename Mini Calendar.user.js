@@ -5,6 +5,8 @@
 // @description  Adds a mini calendar to the header
 // @author       Titanic_ [2968477]]
 // @match        https://www.torn.com/*
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Mini%20Calendar.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Mini%20Calendar.user.js
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @connect      api.torn.com
