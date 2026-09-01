@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Mini Calendar
-// @namespace    Titanic_
+// @namespace    titanic-5.uk
 // @version      1.0
 // @description  Adds a mini calendar to the header
 // @author       Titanic_ [2968477]
