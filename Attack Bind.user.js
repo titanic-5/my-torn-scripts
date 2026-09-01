@@ -5,6 +5,8 @@
 // @description  Press ALT+A on player profile to go to attack page
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/profiles.php*
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attack%20Bind.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attack%20Bind.user.js
 // @grant        none
 // ==/UserScript==
 
