@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Mini Calendar
 // @namespace    titanic-5.uk
-// @version      1.0
+// @version      1.1
 // @description  Adds a mini calendar to the header
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/*
@@ -106,22 +106,23 @@
         .calendar-weekday { width: 25px; font-size: 11px; color: #777777; text-align: center; }
         .dark-mode .calendar-weekday, .dark .calendar-weekday { color: #999999; }
         .calendar-grid { display: flex; flex-wrap: wrap; width: 175px; }
-        .calendar-day { position: relative; width: 25px; height: 25px; font-size: 11px; color: #222222; cursor: pointer; }
+        .calendar-day { position: relative; width: 25px; height: 25px; font-size: 11px; color: #222222; cursor: default; }
         .dark-mode .calendar-day, .dark .calendar-day { color: #ffffff; }
+        .calendar-day[data-e] { cursor: pointer; }
         .calendar-day.inactive { color: #bbbbbb !important; cursor: default; }
         .dark-mode .calendar-day.inactive, .dark .calendar-day.inactive { color: #666666 !important; }
         .calendar-day.current-day .calendar-num { background: #666666 !important; color: #ffffff !important; border-radius: 100%; }
         .dark-mode .calendar-day.current-day .calendar-num, .dark .calendar-day.current-day .calendar-num { background: #888888 !important; color: #ffffff !important; }
         .calendar-num { position: relative; line-height: 25px; text-align: center; z-index: 5; }
-        .calendar-comp-border { position: absolute; inset: 0; z-index: 2; }
+        .calendar-comp-border { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
         .calendar-t { border-top: .8px solid var(--cb, #0005); }
         .calendar-b { border-bottom: .8px solid var(--cb, #0005); }
         .calendar-l { border-left: .8px solid var(--cb, #0005); }
         .calendar-r { border-right: .8px solid var(--cb, #0005); }
-        .calendar-single-base { position: absolute; inset: 0; background: var(--sb); z-index: 1; }
-        .calendar-single-pill { position: absolute; top: 1px; left: 1px; width: 23px; height: 23px; border-radius: 100%; background: var(--pb, #ffffff); border: .8px solid var(--pbr, #cccccc); z-index: 3; }
+        .calendar-single-base { position: absolute; inset: 0; background: var(--sb); z-index: 1; pointer-events: none; }
+        .calendar-single-pill { position: absolute; top: 1px; left: 1px; width: 23px; height: 23px; border-radius: 100%; background: var(--pb, #ffffff); border: .8px solid var(--pbr, #cccccc); z-index: 3; pointer-events: none; }
         .dark-mode .calendar-single-pill, .dark .calendar-single-pill { background: var(--pb, #333333); border: .8px solid var(--pbr, #000000bb); }
-        .calendar-grad-l, .calendar-grad-r { position: absolute; top: 0; bottom: 0; width: 12px; height: 25px; z-index: 1; }
+        .calendar-grad-l, .calendar-grad-r { position: absolute; top: 0; bottom: 0; width: 12px; height: 25px; z-index: 1; pointer-events: none; }
         .calendar-grad-l { right: 0; background: var(--gl); }
         .calendar-grad-r { left: 0; background: var(--gr); }
         .calendar-tooltip { display: none; position: absolute; width: 316px; background: #ffffff; color: #222222; border: 1px solid #cccccc; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25); padding: 0 0 10px; z-index: 9999999999; pointer-events: none; border-radius: 4px; box-sizing: border-box; }
@@ -137,10 +138,11 @@
         .dark-mode .calendar-tooltip-desc, .dark .calendar-tooltip-desc { color: #ffffff; }
         .calendar-footer { border-top: 1px solid #dddddd; margin-top: 6px; padding-top: 4px; display: flex; align-items: center; justify-content: space-between; min-height: 22px; }
         .dark-mode .calendar-footer, .dark .calendar-footer { border-top: 1px solid #444444; }
-        .calendar-btn { cursor: pointer; color: #666666; font-size: 13px; padding: 1px 3px; }
+        .calendar-btn { cursor: pointer; color: #666666; font-size: 13px; padding: 1px 3px; user-select: none; }
         .dark-mode .calendar-btn, .dark .calendar-btn { color: #888888; }
         .calendar-btn:hover { color: #111111; }
         .dark-mode .calendar-btn:hover, .dark .calendar-btn:hover { color: #ffffff; }
+        .calendar-btn.disabled { opacity: 0.25; cursor: default !important; pointer-events: none; }
         .calendar-api-btn { background: none; border: none; color: #666666; font-size: 10px; cursor: pointer; text-decoration: underline; padding: 0; }
         .dark-mode .calendar-api-btn, .dark .calendar-api-btn { color: #888888; }
         .calendar-api-btn:hover { color: #111111; }
@@ -192,6 +194,44 @@
         }
     }
 
+    function getUserStartTimeComponents() {
+        if (userStartTime && userStartTime !== "Requires a Minimal Key") {
+            const match = userStartTime.match(/^(\d{1,2}):(\d{2})/);
+            if (match) {
+                return { hour: parseInt(match[1], 10), minute: parseInt(match[2], 10), second: 0 };
+            }
+        }
+        return { hour: 12, minute: 0, second: 0 };
+    }
+
+    function normalizeTimestamps(startSec, endSec, fixedStartTime) {
+        if (fixedStartTime) {
+            return { start: startSec, end: endSec };
+        }
+
+        const duration = endSec - startSec;
+        const isOneDayEvent = duration <= 86400;
+
+        const sDate = new Date(startSec * 1000);
+        const eDate = new Date(endSec * 1000);
+        const time = getUserStartTimeComponents();
+
+        let normStartDate, normEndDate;
+
+        if (isOneDayEvent) {
+            normStartDate = new Date(Date.UTC(sDate.getUTCFullYear(), sDate.getUTCMonth(), sDate.getUTCDate() - 1, time.hour, time.minute, time.second));
+            normEndDate = new Date(Date.UTC(sDate.getUTCFullYear(), sDate.getUTCMonth(), sDate.getUTCDate() + 1, time.hour, time.minute, time.second));
+        } else {
+            normStartDate = new Date(Date.UTC(sDate.getUTCFullYear(), sDate.getUTCMonth(), sDate.getUTCDate(), time.hour, time.minute, time.second));
+            normEndDate = new Date(Date.UTC(eDate.getUTCFullYear(), eDate.getUTCMonth(), eDate.getUTCDate(), time.hour, time.minute, time.second));
+        }
+
+        return {
+            start: Math.floor(normStartDate.getTime() / 1000),
+            end: Math.floor(normEndDate.getTime() / 1000)
+        };
+    }
+
     async function loadCalendarData(force = false) {
         if (!API_KEY) return;
         const cached = localStorage.getItem(CACHE_KEY);
@@ -239,13 +279,10 @@
         const fmt = d => `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${String(d.getUTCFullYear()).slice(-2)}`;
         const s = new Date(event.start * 1000), e = new Date(event.end * 1000);
 
-        let startTimeStr = userStartTime;
-        if (startTimeStr !== "Requires a Minimal Key") {
-            startTimeStr = startTimeStr.replace(' TCT', '') + ':00';
-        }
+        const timeS = `${pad(s.getUTCHours())}:${pad(s.getUTCMinutes())}:${pad(s.getUTCSeconds())}`;
+        const timeE = `${pad(e.getUTCHours())}:${pad(e.getUTCMinutes())}:${pad(e.getUTCSeconds())}`;
 
-        const time = event.fixed_start_time ? `${pad(s.getUTCHours())}:${pad(s.getUTCMinutes())}:${pad(s.getUTCSeconds())}` : startTimeStr;
-        return `${time} - ${fmt(s)} until ${time} - ${fmt(e)}`;
+        return `${timeS} - ${fmt(s)} until ${timeE} - ${fmt(e)}`;
     }
 
     function renderCalendar() {
@@ -256,12 +293,24 @@
         const allEvents = [
             ...(calendarData?.competitions || []).map((c, i) => ({ ...c, isCompetition: true, eventId: `c_${i}` })),
             ...(calendarData?.events || []).map((e, i) => ({ ...e, isCompetition: false, eventId: `e_${i}` }))
-        ];
+        ].map(e => {
+            const norm = normalizeTimestamps(e.start, e.end, !!e.fixed_start_time);
+            const isSingle = !e.isCompetition && (e.end - e.start <= 86400);
+            return {
+                ...e,
+                rawStart: e.start,
+                rawEnd: e.end,
+                start: norm.start,
+                end: norm.end,
+                isSingleDay: isSingle,
+                isMultiDay: !isSingle
+            };
+        });
 
         const tctNow = getTCT(), nowStamp = Math.floor(tctNow.getTime() / 1000);
         const mStart = Date.UTC(activeYear, activeMonth, 1) / 1000;
         const mEnd = Date.UTC(activeYear, activeMonth + 1, 0, 23, 59, 59) / 1000;
-        const headerEvt = allEvents.find(e => e.start <= mEnd && e.end >= mStart && (e.isCompetition || (e.end - e.start) > 86400));
+        const headerEvt = allEvents.find(e => e.start <= mEnd && e.end >= mStart && e.isMultiDay);
         const activeMeta = EVENT_DATA[headerEvt?.title];
 
         let html = `
@@ -281,47 +330,94 @@
             let day = i - startOffset + 1, inMonth = day > 0 && day <= daysInMonth;
             let dNum = inMonth ? day : (day <= 0 ? daysInPrev + day : day - daysInMonth);
             let cMonth = inMonth ? activeMonth : (day <= 0 ? activeMonth - 1 : activeMonth + 1);
-            let cStart = Date.UTC(activeYear, cMonth, dNum, 0, 0, 0) / 1000;
-            let cEnd = Date.UTC(activeYear, cMonth, dNum, 23, 59, 59) / 1000;
 
-            const isToday = inMonth && activeYear === tctNow.getUTCFullYear() && activeMonth === tctNow.getUTCMonth() && dNum === tctNow.getUTCDate();
-            const evt = allEvents.find(e => e.start <= cEnd && e.end >= cStart);
-            const prevEvt = allEvents.find(e => !e.fixed_start_time && (e.end - e.start) <= 172800 && e.start <= cEnd + 86400 && e.end >= cStart + 86400);
-            const nextEvt = allEvents.find(e => !e.fixed_start_time && (e.end - e.start) <= 172800 && e.start <= cEnd - 86400 && e.end >= cStart - 86400);
-            const evtRef = evt || prevEvt || nextEvt;
-
-            let layers = '', compStyle = '';
-            if (evt) {
-                const isMulti = (evt.end - evt.start) > 172800, isPast = evt.end < nowStamp;
-                const pal = EVENT_DATA[evt.title]?.t || THEMES.amber;
-
-                if (isMulti) {
-                    const compBg = isPast ? (isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.06)') : (isDark ? 'rgba(76,110,245,0.05)' : 'rgba(76,110,245,0.12)');
-                    const compBorder = isPast ? (isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.15)') : 'rgba(76,110,245,0.4)';
-                    compStyle = `background: ${compBg}; --cb: ${compBorder}`;
-                    const l = (i % 7 === 0) || (cStart <= evt.start && evt.start <= cEnd);
-                    const r = (i % 7 === 6) || (cStart <= evt.end && evt.end <= cEnd);
-                    layers = `<div class="calendar-comp-border calendar-t calendar-b ${l ? 'calendar-l' : ''} ${r ? 'calendar-r' : ''}"></div>`;
-                } else if (Math.abs(evt.start - cStart) < 86400) {
-                    const gMid = isPast ? (isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)') : pal.mid;
-                    const gHi = isPast ? (isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.05)') : pal.hi;
-                    const pillBg = isPast ? (isDark ? '#333333' : '#e0e0e0') : pal.pill;
-                    const pillBorder = isPast ? (isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.2)') : pal.border;
-
-                    layers = `<div class="calendar-single-base" style="--sb: linear-gradient(90deg, ${gHi} 0%, ${gMid} 50%, ${gHi} 100%);"></div>
-                             <div class="calendar-single-pill" style="--pb: ${pillBg}; --pbr: ${pillBorder};"></div>`;
-                }
-            } else if (prevEvt && !evt) {
-                const pal = EVENT_DATA[prevEvt.title]?.t || THEMES.amber;
-                layers = `<div class="calendar-grad-l" style="--gl: linear-gradient(90deg, ${pal.lo} 0%, ${pal.hi} 100%);"></div>`;
-            } else if (nextEvt && !evt) {
-                const pal = EVENT_DATA[nextEvt.title]?.t || THEMES.amber;
-                layers = `<div class="calendar-grad-r" style="--gr: linear-gradient(90deg, ${pal.hi} 0%, ${pal.lo} 100%);"></div>`;
+            const isOutOfYear = (activeMonth === 0 && day <= 0) || (activeMonth === 11 && day > daysInMonth);
+            if (isOutOfYear) {
+                html += `<div class="calendar-day inactive"><div class="calendar-num">${dNum}</div></div>`;
+                continue;
             }
 
-            const evtPayload = evtRef ? encodeURIComponent(JSON.stringify({
-                id: evtRef.eventId, title: evtRef.title, dur: formatDuration(evtRef), desc: evtRef.description,
-                img: `/images/v2/calendar/${EVENT_DATA[evtRef.title]?.isComp ? 'competitions' : 'events'}/${EVENT_DATA[evtRef.title]?.b || 'tourism_day.png'}`
+            let dayStart = Date.UTC(activeYear, cMonth, dNum, 0, 0, 0) / 1000;
+            let dayEnd = Date.UTC(activeYear, cMonth, dNum, 23, 59, 59) / 1000;
+
+            const isToday = inMonth && activeYear === tctNow.getUTCFullYear() && activeMonth === tctNow.getUTCMonth() && dNum === tctNow.getUTCDate();
+
+            const primarySingleEvt = allEvents.find(e => {
+                if (!e.isSingleDay) return false;
+                const origStart = new Date(e.rawStart * 1000);
+                return origStart.getUTCFullYear() === activeYear && origStart.getUTCMonth() === cMonth && origStart.getUTCDate() === dNum;
+            });
+
+            const multiEvts = allEvents.filter(e => e.isMultiDay && e.start <= dayEnd && e.end >= dayStart);
+
+            const prevSingleEvt = (!primarySingleEvt && !(activeMonth === 0 && dNum === 1)) ? allEvents.find(e => {
+                if (!e.isSingleDay || e.fixed_start_time) return false;
+                const origStart = new Date(e.rawStart * 1000);
+                const prevDay = new Date(Date.UTC(activeYear, cMonth, dNum - 1));
+                if (prevDay.getUTCFullYear() !== activeYear) return false;
+                return origStart.getUTCFullYear() === prevDay.getUTCFullYear() && origStart.getUTCMonth() === prevDay.getUTCMonth() && origStart.getUTCDate() === prevDay.getUTCDate();
+            }) : null;
+
+            const nextSingleEvt = (!primarySingleEvt && !(activeMonth === 11 && dNum === 31)) ? allEvents.find(e => {
+                if (!e.isSingleDay || e.fixed_start_time) return false;
+                const origStart = new Date(e.rawStart * 1000);
+                const nextDay = new Date(Date.UTC(activeYear, cMonth, dNum + 1));
+                if (nextDay.getUTCFullYear() !== activeYear) return false;
+                return origStart.getUTCFullYear() === nextDay.getUTCFullYear() && origStart.getUTCMonth() === nextDay.getUTCMonth() && origStart.getUTCDate() === nextDay.getUTCDate();
+            }) : null;
+
+            let layers = '', compStyle = '';
+
+            if (multiEvts.length > 0) {
+                multiEvts.forEach(mEvt => {
+                    const isPast = mEvt.end < nowStamp;
+                    const metaPal = EVENT_DATA[mEvt.title]?.t || THEMES.blue;
+                    const compBg = isPast ? (isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.06)') : (isDark ? 'rgba(76,110,245,0.05)' : 'rgba(76,110,245,0.12)');
+                    const compBorder = isPast ? (isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.15)') : metaPal.border;
+
+                    compStyle += `background: ${compBg}; --cb: ${compBorder};`;
+
+                    const l = (i % 7 === 0) || (dayStart <= mEvt.start && mEvt.start <= dayEnd);
+                    const r = (i % 7 === 6) || (dayStart <= mEvt.end && mEvt.end <= dayEnd);
+                    layers += `<div class="calendar-comp-border calendar-t calendar-b ${l ? 'calendar-l' : ''} ${r ? 'calendar-r' : ''}"></div>`;
+                });
+            }
+
+            if (primarySingleEvt) {
+                const isPast = primarySingleEvt.end < nowStamp;
+                const pal = EVENT_DATA[primarySingleEvt.title]?.t || THEMES.amber;
+
+                const gMid = isPast ? (isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)') : pal.mid;
+                const gHi = isPast ? (isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.05)') : pal.hi;
+                const pillBg = isPast ? (isDark ? '#333333' : '#e0e0e0') : pal.pill;
+                const pillBorder = isPast ? (isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.2)') : pal.border;
+
+                layers += `<div class="calendar-single-base" style="--sb: linear-gradient(90deg, ${gHi} 0%, ${gMid} 50%, ${gHi} 100%);"></div>
+                           <div class="calendar-single-pill" style="--pb: ${pillBg}; --pbr: ${pillBorder};"></div>`;
+            } else {
+                if (prevSingleEvt) {
+                    const isPast = prevSingleEvt.end < nowStamp;
+                    const pal = EVENT_DATA[prevSingleEvt.title]?.t || THEMES.amber;
+                    const gHi = isPast ? (isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.05)') : pal.hi;
+                    const gLo = isPast ? (isDark ? 'rgba(0,0,0,0.07)' : 'rgba(0,0,0,0.015)') : pal.lo;
+                    layers += `<div class="calendar-grad-r" style="--gr: linear-gradient(90deg, ${gHi} 0%, ${gLo} 100%);"></div>`;
+                }
+                if (nextSingleEvt) {
+                    const isPast = nextSingleEvt.end < nowStamp;
+                    const pal = EVENT_DATA[nextSingleEvt.title]?.t || THEMES.amber;
+                    const gLo = isPast ? (isDark ? 'rgba(0,0,0,0.07)' : 'rgba(0,0,0,0.015)') : pal.lo;
+                    const gHi = isPast ? (isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.05)') : pal.hi;
+                    layers += `<div class="calendar-grad-l" style="--gl: linear-gradient(90deg, ${gLo} 0%, ${gHi} 100%);"></div>`;
+                }
+            }
+
+            const activeEvt = primarySingleEvt || multiEvts[0] || nextSingleEvt || prevSingleEvt;
+            const evtPayload = activeEvt ? encodeURIComponent(JSON.stringify({
+                id: activeEvt.eventId,
+                title: activeEvt.title,
+                dur: formatDuration(activeEvt),
+                desc: activeEvt.description,
+                img: `/images/v2/calendar/${EVENT_DATA[activeEvt.title]?.isComp ? 'competitions' : 'events'}/${EVENT_DATA[activeEvt.title]?.b || 'tourism_day.png'}`
             })) : '';
 
             html += `<div class="calendar-day ${!inMonth ? 'inactive' : ''} ${isToday ? 'current-day' : ''}" style="${compStyle}" ${evtPayload ? `data-e="${evtPayload}"` : ''}>
@@ -329,9 +425,15 @@
             </div>`;
         }
 
+        const isFirstMonth = activeMonth === 0;
+        const isLastMonth = activeMonth === 11;
+
         html += `</div><div class="calendar-footer">
             ${!isEditingApi ? `
-                <div style="display:flex; gap:6px;"><span class="calendar-btn" id="calendar-p">&lt;</span><span class="calendar-btn" id="calendar-n">&gt;</span></div>
+                <div style="display:flex; gap:6px;">
+                    <span class="calendar-btn ${isFirstMonth ? 'disabled' : ''}" id="calendar-p">&lt;</span>
+                    <span class="calendar-btn ${isLastMonth ? 'disabled' : ''}" id="calendar-n">&gt;</span>
+                </div>
                 <button class="calendar-api-btn" id="calendar-api-m">Manage API</button>
             ` : `
                 <div style="display:flex; gap:4px; width:100%;">
@@ -371,17 +473,21 @@
         };
 
         const pBtn = document.getElementById('calendar-p'), nBtn = document.getElementById('calendar-n');
-        if (pBtn) pBtn.onclick = (e) => {
+        if (pBtn && !isFirstMonth) pBtn.onclick = (e) => {
             e.stopPropagation();
             hideTooltip(true);
-            if (--activeMonth < 0) { activeMonth = 11; activeYear--; }
-            renderCalendar();
+            if (activeMonth > 0) {
+                activeMonth--;
+                renderCalendar();
+            }
         };
-        if (nBtn) nBtn.onclick = (e) => {
+        if (nBtn && !isLastMonth) nBtn.onclick = (e) => {
             e.stopPropagation();
             hideTooltip(true);
-            if (++activeMonth > 11) { activeMonth = 0; activeYear++; }
-            renderCalendar();
+            if (activeMonth < 11) {
+                activeMonth++;
+                renderCalendar();
+            }
         };
 
         const apiM = document.getElementById('calendar-api-m');
