@@ -1,13 +1,15 @@
 // ==UserScript==
 // @name         Torn Pickpocket Helper
-// @namespace    Titanic_
+// @namespace    titanic-5.uk
 // @version      1.0
 // @description  Pickpocket HUD
-// @author       Titanic_
+// @author       Titanic_ [2968477]
 // @match        https://www.torn.com/page.php?sid=crimes
 // @exclude      https://www.torn.com/forums.php*
 // @exclude      https://www.torn.com/trade.php*
 // @exclude      https://www.torn.com/item.php*
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Pickpocket%20Helper.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Pickpocket%20Helper.user.js
 // @grant        unsafeWindow
 // @run-at       document-start
 // ==/UserScript==
