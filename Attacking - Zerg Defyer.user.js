@@ -7,8 +7,8 @@
 // @run-at      document-start
 // @match       https://www.torn.com/page.php?sid=attack*
 // @require     https://unpkg.com/xhook@1.6.2/dist/xhook.min.js
-// @downloadURL https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/zerg_defyer.user.js
-// @updateURL   https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/zerg_defyer.user.js
+// @downloadURL https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Zerg%20Defyer.user.js
+// @updateURL   https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Zerg%20Defyer.user.js
 // @grant       GM.addStyle
 // ==/UserScript==
 

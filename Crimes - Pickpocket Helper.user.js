@@ -8,8 +8,8 @@
 // @exclude      https://www.torn.com/forums.php*
 // @exclude      https://www.torn.com/trade.php*
 // @exclude      https://www.torn.com/item.php*
-// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Pickpocket%20Helper.user.js
-// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Pickpocket%20Helper.user.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Crimes%20-%20Pickpocket%20Helper.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Crimes%20-%20Pickpocket%20Helper.user.js
 // @grant        unsafeWindow
 // @run-at       document-start
 // ==/UserScript==

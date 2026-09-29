@@ -5,8 +5,8 @@
 // @description  Adds buttons to remove at million $ intervals to the trade page to make it easier to manage money in ghost trades.
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/trade.php*
-// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Ghost%20Trade%20Buttons.js
-// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Ghost%20Trade%20Buttons.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Trading%20-%20Ghost%20Trade%20Buttons.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Trading%20-%20Ghost%20Trade%20Buttons.user.js
 // @grant        none
 // ==/UserScript==
 

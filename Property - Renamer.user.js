@@ -6,8 +6,8 @@
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/properties.php
 // @require      https://gist.github.com/raw/2625891/waitForKeyElements.js
-// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/propertyRename.user.js
-// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/propertyRename.user.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Property%20-%20Renamer.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Property%20-%20Renamer.user.js
 // @grant        none
 // ==/UserScript==
 

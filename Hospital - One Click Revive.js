@@ -5,8 +5,8 @@
 // @description  makes revives a single click
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/hospitalview.php*
-// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/one_click_revive.user.js
-// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/one_click_revive.user.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Hospital%20-%20One%20Click%20Revive.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Hospital%20-%20One%20Click%20Revive.js
 // @grant        none
 // ==/UserScript==
 

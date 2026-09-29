@@ -5,8 +5,8 @@
 // @description  Highlight special events in attack logs
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/page.php?sid=attackLog*
-// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/log_highlighter.user.js
-// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/log_highlighter.user.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Log%20Highlighter.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Log%20Highlighter.js
 // @grant        none
 // ==/UserScript==
 

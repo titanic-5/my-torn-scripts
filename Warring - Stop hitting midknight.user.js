@@ -5,8 +5,8 @@
 // @description  Removes attack buttons for specified user IDs
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/*
-// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/stop_hitting_midknight.user.js
-// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/stop_hitting_midknight.user.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Warring%20-%20Stop%20hitting%20midknight.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Warring%20-%20Stop%20hitting%20midknight.user.js
 // @grant        none
 // ==/UserScript==
 

@@ -6,8 +6,8 @@
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/profiles.php*
 // @match        https://www.torn.com/factions.php*
-// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/stakeout.user.js
-// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/stakeout.user.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Warring%20-%20Stakeout.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Warring%20-%20Stakeout.user.js
 // @grant        GM_xmlhttpRequest
 // @connect      yata.yt
 // @connect      ffscouter.com

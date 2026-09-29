@@ -5,8 +5,8 @@
 // @description  Adds a remove all button to bazaar page
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/bazaar.php*
-// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/bazaar-remove_all.user.js
-// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/bazaar-remove_all.user.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Bazaar%20-%20Remove%20All.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Bazaar%20-%20Remove%20All.user.js
 // @grant        none
 // ==/UserScript==
 

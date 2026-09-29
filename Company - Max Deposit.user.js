@@ -5,8 +5,8 @@
 // @description  Automatically maxes out the deposit input in a company vault
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/companies.php*
-// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Company%20-%20Max%20-.user.js
-// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Company%20-%20Max%20-.user.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Company%20-%20Max%20Deposit.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Company%20-%20Max%20Deposit.user.js
 // @grant        window.onurlchange
 // ==/UserScript==
 

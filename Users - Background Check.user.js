@@ -8,6 +8,8 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Users%20-%20Background%20Check.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Users%20-%20Background%20Check.user.js
 // @connect      api.torn.com
 // @connect      api.torndown.eu
 // @license      MIT

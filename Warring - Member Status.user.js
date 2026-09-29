@@ -5,8 +5,8 @@
 // @description  Displays online, offline, and idle counts in faction wars
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/factions.php*
-// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/ranked_war_member_states.user.js
-// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/ranked_war_member_states.user.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Warring%20-%20Member%20Status.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Warring%20-%20Member%20Status.user.js
 // @grant        none
 // ==/UserScript==
 

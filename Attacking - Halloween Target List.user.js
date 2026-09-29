@@ -9,8 +9,8 @@
 // @match        https://www.torn.com/page.php?sid=list&type=targets*
 // @grant        GM_getValue
 // @grant        GM_setValue
-// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Halloween%20List.user.js
-// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Halloween%20List.user.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Halloween%20Target%20List.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Halloween%20Target%20List.user.js
 // @run-at       document-end
 // ==/UserScript==
 

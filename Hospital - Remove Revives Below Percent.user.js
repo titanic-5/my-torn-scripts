@@ -5,8 +5,8 @@
 // @description  Title
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/hospital*
-// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/hospital-remove_revives_below_percent.user.js
-// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/hospital-remove_revives_below_percent.user.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Hospital%20-%20Remove%20Revives%20Below%20Percent.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Hospital%20-%20Remove%20Revives%20Below%20Percent.user.js
 // @grant        none
 // ==/UserScript==
 

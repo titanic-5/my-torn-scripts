@@ -5,8 +5,8 @@
 // @description  Adds a button in sidebar to find profitable stuff in tornw3b
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/*
-// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Profit_Checker.user.js
-// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Profit_Checker.user.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Global%20-%20Profit%20Checker.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Global%20-%20Profit%20Checker.user.js
 // @grant        GM_addStyle
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue

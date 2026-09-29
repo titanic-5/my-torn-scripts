@@ -6,8 +6,8 @@
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/properties.php*
 // @match        https://www.torn.com/item.php*
-// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Give_To_Hollis.user.js
-// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Give_To_Hollis.user.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Trolling%20-%20Give%20to%20Hollis.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Trolling%20-%20Give%20to%20Hollis.user.js
 // @grant        none
 // ==/UserScript==
 

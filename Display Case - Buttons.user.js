@@ -5,8 +5,8 @@
 // @description  Adds buttons to move to top or bottom of list
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/displaycase.php*
-// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/display_case-buttons.user.js
-// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/display_case-buttons.user.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Display%20Case%20-%20Buttons.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Display%20Case%20-%20Buttons.user.js
 // @grant        none
 // ==/UserScript==
 

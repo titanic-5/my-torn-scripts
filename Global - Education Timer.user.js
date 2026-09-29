@@ -5,8 +5,8 @@
 // @description  Convert to hours
 // @author       Titanic_ [2968477]
 // @match        *://*.torn.com/*
-// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/edu_timer.user.js
-// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/edu_timer.user.js
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Global%20-%20Education%20Timer.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Global%20-%20Education%20Timer.user.js
 // @grant        none
 // ==/UserScript==
 
