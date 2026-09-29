@@ -42,82 +42,82 @@ To use these scripts, install a userscript manager extension in your browser:
 
 ### Halloween Target List
 ![Halloween Target List](screenshots/halloween-targets.png)  
-[Back to top](#scripts-table)
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Halloween%20Target%20List.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
 ### Log Highlighter
 ![Log Highlighter](screenshots/log-highlighter.png)  
-[Back to top](#scripts-table)
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Log%20Highlighter.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
 ### Auto-Fill Search
 ![Auto-Fill Search](screenshots/bazaar-autofill.png)  
-[Back to top](#scripts-table)
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Bazaar%20-%20Auto-fill%20Search.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
 ### Remove All
 ![Remove All](screenshots/bazaar-remove-all.png)  
-[Back to top](#scripts-table)
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Bazaar%20-%20Remove%20All.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
 ### Withdraw Buttons
 ![Withdraw Buttons](screenshots/company-withdraw.png)  
-[Back to top](#scripts-table)
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Company%20-%20Withdraw%20Buttons.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
 ### Pickpocket Helper
 ![Pickpocket Helper](screenshots/pickpocket-helper.png)  
-[Back to top](#scripts-table)
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Crimes%20-%20Pickpocket%20Helper.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
 ### Display Case Buttons
 ![Display Case Buttons](screenshots/display-case-buttons.png)  
-[Back to top](#scripts-table)
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Display%20Case%20-%20Buttons.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
 ### Display Case Checklist
 ![Display Case Checklist](screenshots/display-case-checklist.png)  
-[Back to top](#scripts-table)
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Display%20Case%20-%20Checklist.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
 ### Mini Calendar
 ![Mini Calendar](screenshots/mini-calendar.png)  
-[Back to top](#scripts-table)
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Global%20-%20Mini%20Calendar.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
 ### Renamer
 ![Renamer](screenshots/property-renamer.png)  
-[Back to top](#scripts-table)
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Property%20-%20Renamer.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
 ### Riggers and Minors
 ![Riggers and Minors](screenshots/riggers-miners.png)  
-[Back to top](#scripts-table)
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Search%20-%20Riggers%20and%20Minors.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
 ### Ghost Trade Buttons
 ![Ghost Trade Buttons](screenshots/ghost-trade.png)  
-[Back to top](#scripts-table)
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Trading%20-%20Ghost%20Trade%20Buttons.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
 ### Background Check
 ![Background Check](screenshots/background-check.png)  
-[Back to top](#scripts-table)
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Users%20-%20Background%20Check.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
 ### Stakeout
 ![Stakeout](screenshots/warring-stakeout.png)  
-[Back to top](#scripts-table)
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Warring%20-%20Stakeout.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
