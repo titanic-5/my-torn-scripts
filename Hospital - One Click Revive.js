@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Torn - One Click Revive
+// @name         Hospital - One Click Revive
 // @namespace    titanic-5.uk
 // @version      1.0
 // @description  makes revives a single click

@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Stakeout Script
+// @name         Warring - Stakeout
 // @namespace    titanic-5.uk
 // @version      2.7.8
 // @description  Stakeout factions or individual users

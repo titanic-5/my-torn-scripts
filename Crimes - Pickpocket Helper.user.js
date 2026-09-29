@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Torn Pickpocket Helper
+// @name         Crimes - Pickpocket Helper
 // @namespace    titanic-5.uk
 // @version      1.0
 // @description  Pickpocket HUD

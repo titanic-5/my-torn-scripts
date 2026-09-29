@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Ranked War Member Status
+// @name         Warring - Member Status
 // @namespace    titanic-5.uk
 // @version      1.3
 // @description  Displays online, offline, and idle counts in faction wars

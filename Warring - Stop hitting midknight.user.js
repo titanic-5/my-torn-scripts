@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Stop hitting midknight
+// @name         Warring - Stop hitting midknight
 // @namespace    titanic-5.uk
 // @version      1.0
 // @description  Removes attack buttons for specified user IDs
@@ -15,7 +15,7 @@
 
     const blockThisGuy = ["332505", ];
 
-    function removeBlockedAttackLinks() {
+    function remove() {
         document.querySelectorAll('a[href*="sid=getInAttack"]').forEach((link) => {
             let urlParams = new URLSearchParams(link.getAttribute("href"));
             let userId = urlParams.get("user2ID");
@@ -27,5 +27,5 @@
         });
     }
 
-    setInterval(removeBlockedAttackLinks, 1000);
+    setInterval(remove, 1000);
 })();

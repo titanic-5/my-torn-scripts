@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Torn Halloween Target List
+// @name         Attackig - Halloween Target List
 // @namespace    titanic-5.uk
 // @version      1.1
 // @description  Adds toggle to profiles and displays the list under Enemies and Targets

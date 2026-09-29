@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Replace Edu Timer
+// @name         Global - Education Timer
 // @namespace    titanic-5.uk
 // @version      1.1
 // @description  Convert to hours

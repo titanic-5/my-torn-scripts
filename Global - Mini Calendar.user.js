@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Mini Calendar
+// @name         Global - Mini Calendar
 // @namespace    titanic-5.uk
 // @version      1.1
 // @description  Adds a mini calendar to the header

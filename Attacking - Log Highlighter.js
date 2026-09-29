@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Attack Log Highlighter
+// @name         Attacking - Log Highlighter
 // @namespace    titanic-5.uk
 // @version      1.5
 // @description  Highlight special events in attack logs

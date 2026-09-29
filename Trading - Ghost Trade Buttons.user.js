@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Ghost Trade Buttons
+// @name         Trading - Ghost Trade Buttons
 // @namespace    titanic-5.uk
 // @version      2.0
 // @description  Adds buttons to remove at million $ intervals to the trade page to make it easier to manage money in ghost trades.

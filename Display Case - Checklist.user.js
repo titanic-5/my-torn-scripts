@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Display Case Checklist
+// @name         Display Case - Checklist
 // @namespace    titanic-5.uk
 // @version      1.0
 // @description  Adds a button to the display case that shows all items you have and dont have

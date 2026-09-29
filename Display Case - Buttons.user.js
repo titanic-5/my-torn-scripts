@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Display Case - Move to Top/Bottom
+// @name         Display Case - Buttons
 // @namespace    titanic-5.uk
 // @version      1.0
 // @description  Adds buttons to move to top or bottom of list

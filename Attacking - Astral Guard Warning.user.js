@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Astral Guard Warning
+// @name         Attacking - Astral Guard Warning
 // @namespace    titanic-5.uk
 // @version      1.1
 // @description  If Astral Guard effect is active, shows warning (minion/maol invulnerability)

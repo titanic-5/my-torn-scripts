@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name        Anti-Zerg (Attack loader links)
+// @name        Attacking - Zerg Defyer
 // @namespace   titanic-5.uk
 // @version     1.3
-// @description makes usernames on the attack loader clickable to their attack pages.
+// @description makes usernames on the attack loader clickable to their attack pages
 // @author      Titanic_ [2968477]
 // @run-at      document-start
 // @match       https://www.torn.com/page.php?sid=attack*

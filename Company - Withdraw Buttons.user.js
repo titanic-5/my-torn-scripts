@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Company Withdraw Buttons
+// @name         Company - Withdraw Buttons
 // @namespace    titanic-5.uk
 // @version      2.0
 // @description  Adds buttons to remove at million $ intervals to the vault page to make it easier to manage money in company vault.

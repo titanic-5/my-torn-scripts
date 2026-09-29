@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Attack Bind
+// @name         Attacking - Attack Bind
 // @namespace    titanic-5.uk
 // @version      1.0
 // @description  Press ALT+A on player profile to go to attack page

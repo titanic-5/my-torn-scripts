@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Torn Bazaar Auto-Fill Search
+// @name         Bazaar - Auto-Fill Search
 // @namespace    titanic-5.uk
 // @version      1.0
 // @description  Auto-fills search field with item name in bazaars

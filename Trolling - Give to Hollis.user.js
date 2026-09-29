@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Give it to Hollis
+// @name         Trolling - Give to Hollis
 // @namespace    titanic-5.uk
 // @version      1.0
 // @description  title

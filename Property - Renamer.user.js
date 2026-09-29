@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Torn - Property Name Editor
+// @name         Property - Renamer
 // @namespace    titanic-5.uk
 // @version      1.0
 // @description  Add a pencil icon to edit nicknames for properties.

@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Profit Checker
+// @name         Global - Profit Checker
 // @namespace    titanic-5.uk
 // @version      1.1
 // @description  Adds a button in sidebar to find profitable stuff in tornw3b

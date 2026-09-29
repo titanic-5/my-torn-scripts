@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Torn Profile Quick Lookup & Fed Record
+// @name         Users - Background Check
 // @namespace    torndown.eu
 // @version      3.3.1
 // @description  Adds Quick Lookup and Discord buttons to Torn user profiles with integrated Federal Jail records.

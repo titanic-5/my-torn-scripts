@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Company - Max $
+// @name         Company - Max Deposit
 // @namespace    titanic-5.uk
 // @version      1.0
 // @description  Automatically maxes out the deposit input in a company vault

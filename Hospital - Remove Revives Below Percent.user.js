@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Remove Revives Below X%
+// @name         Hospital - Remove Revives Below X%
 // @namespace    titanic-5.uk
 // @version      1.0
 // @description  Title
