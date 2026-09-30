@@ -35,6 +35,7 @@ To use these scripts, install a userscript manager extension in your browser:
 | **Warring** | Member Status | Displays online, offline, and idle counts during faction wars. | 11 Mar 2026 | N/A | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Warring%20-%20Member%20Status.user.js) |
 | **Warring** | Stakeout | Stakeout factions or individual users. | 06 Jul 2026 | [Preview](#stakeout) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Warring%20-%20Stakeout.user.js) |
 | **Warring** | Stop hitting midknight | Removes attack buttons for specified user IDs. | 03 Feb 2025 | N/A | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Warring%20-%20Stop%20hitting%20midknight.user.js) |
+| **Styling** | Chat | Get rid of the ugly ass box shadow. Reverted to chat 2.0 | 30 Sep 2026 | [Preview](#chat) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Styling%20-%20Chat.user.js) |
 
 ---
 
@@ -121,3 +122,9 @@ To use these scripts, install a userscript manager extension in your browser:
 ### Stakeout
 ![Stakeout](screenshots/warring-stakeout.png)  
 [Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Warring%20-%20Stakeout.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
+
+---
+
+### Chat
+![Chat](screenshots/styling-chat.png)  
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Styling%20-%20Chat.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)

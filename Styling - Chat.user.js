@@ -7,6 +7,8 @@
 // @author       Titanic_
 // @match        *://*.torn.com/*
 // @grant        none
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Styling%20-%20Chat.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Styling%20-%20Chat.user.js
 // ==/UserScript==
 
 (function() {
