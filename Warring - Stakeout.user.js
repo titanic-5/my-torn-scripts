@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Warring - Stakeout
 // @namespace    titanic-5.uk
-// @version      2.7.8
+// @version      2.7.9
 // @description  Stakeout factions or individual users
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/profiles.php*
@@ -659,15 +659,20 @@ async function fetchBSPSpyData(factionID, memberIDs) {
   if (!bspApiKey || memberIDs.length === 0) return null;
 
   const cached = await getSpyDataFromDB(factionID, BSP_SPIES_STORE_NAME);
-  if (cached && isCacheValid(cached) && cached.data && Object.keys(cached.data).length > 0) return cached.data;
+  let allBSPData = (cached && isCacheValid(cached) && cached.data) ? { ...cached.data } : {};
 
-  let allBSPData = {};
-  const MAX_CONCURRENT_REQUESTS = 5;
+  const missingIDs = memberIDs.filter((id) => !allBSPData[id.toString()]);
+  if (missingIDs.length === 0) {
+    return allBSPData;
+  }
 
-  const targets = memberIDs.map((id) => ({
+  const MAX_CONCURRENT_REQUESTS = 3;
+  const targets = missingIDs.map((id) => ({
     id: id.toString(),
     url: BSP_BASE_URL.replace("[APIKEY]", bspApiKey).replace("[TARGET_USER_ID]", id),
   }));
+
+  const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   async function throttleFetch(items, maxConcurrent, fetchFn) {
     let results = [];
@@ -679,6 +684,7 @@ async function fetchBSPSpyData(factionID, memberIDs) {
       if (pool.size >= maxConcurrent) {
         await Promise.race(pool);
       }
+      await delay(50);
       results.push(promise);
     }
     return Promise.all(results.map((p) => p.catch((e) => ({ error: e.message }))));
@@ -701,32 +707,39 @@ async function fetchBSPSpyData(factionID, memberIDs) {
       }
       return null;
     }
-    return null;
+    return { TargetId: target.id, Result: 0 };
   };
 
   try {
     const responses = await throttleFetch(targets, MAX_CONCURRENT_REQUESTS, fetchSingleBSP);
-
     responses
-      .filter((r) => r && r.Result === 1)
+      .filter((r) => r && r.TargetId)
       .forEach((item) => {
-        allBSPData[item.TargetId.toString()] = {
-          tbs: item.TBS,
-          predictionDate: item.PredictionDate,
-          last_updated: Math.floor(Date.now() / 1000),
-        };
+        if (item.Result === 1) {
+          allBSPData[item.TargetId.toString()] = {
+            tbs: item.TBS,
+            predictionDate: item.PredictionDate,
+            last_updated: Math.floor(Date.now() / 1000),
+          };
+        } else {
+          allBSPData[item.TargetId.toString()] = {
+            tbs: null,
+            predictionDate: null,
+            last_updated: Math.floor(Date.now() / 1000),
+          };
+        }
       });
   } catch (e) {
     if (e.message === "Invalid API Key") return null;
     console.error("[Stakeout] Fatal error during BSP batch fetch:", e);
-    return null;
+    return allBSPData;
   }
 
   if (Object.keys(allBSPData).length > 0) {
     await saveSpyDataToDB(factionID, allBSPData, BSP_SPIES_STORE_NAME);
-    return allBSPData;
   }
-  return null;
+
+  return allBSPData;
 }
 
 async function checkIndividualUserAndAlert(alertedUserID) {
