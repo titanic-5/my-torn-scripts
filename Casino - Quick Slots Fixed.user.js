@@ -12,28 +12,21 @@
 // ==/UserScript==
 
 (function () {
-    'use strict';
+  "use strict";
 
-    $.ajaxSetup({
-        dataFilter: ajaxFilter
-    });
+  $.ajaxSetup({
+    dataFilter: ajaxFilter,
+  });
 
-    function ajaxFilter(data) {
-        if (!data) return data;
-
-        try {
-            const obj = JSON.parse(data);
-
-            if (obj?.barrelsAnimationSpeed) {
-                obj.barrelsAnimationSpeed = Math.max(
-                    75,
-                    Math.floor(obj.barrelsAnimationSpeed / 10)
-                );
-
-                return JSON.stringify(obj);
-            }
-        } catch (e) {}
-
-        return data;
-    }
+  function ajaxFilter(data) {
+    if (!data) return data;
+    try {
+      const obj = JSON.parse(data);
+      if (obj?.barrelsAnimationSpeed) {
+        obj.barrelsAnimationSpeed = Math.max(75, Math.floor(obj.barrelsAnimationSpeed / 10));
+        return JSON.stringify(obj);
+      }
+    } catch (e) {}
+    return data;
+  }
 })();
