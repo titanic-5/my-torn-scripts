@@ -7,6 +7,8 @@
 // @match        https://www.torn.com/page.php?sid=slots
 // @grant        none
 // @license      MIT
+// @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Casino%20-%20Quick%20Slots%20Fixed.user.js
+// @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Casino%20-%20Quick%20Slots%20Fixed.user.js
 // ==/UserScript==
 
 (function () {
