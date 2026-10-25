@@ -1,0 +1,181 @@
+// ==UserScript==
+// @name        Treat counter
+// @description Adds treat counter to torn
+// @namespace   m0tch.torn.treats
+// @match       https://www.torn.com/*
+// @run-at      document-end
+// @grant       GM_addStyle
+// @version     1.0
+// @author      m0tch + Titanic_
+// @license     MIT
+// ==/UserScript==
+
+(async function () {
+  "use strict";
+  console.log("Treat counter initialized");
+  localStorage.treatCount = localStorage.treatCount ?? 0;
+
+  const viewPortWidthPx = window.innerWidth;
+  const isMobileView = viewPortWidthPx <= 784;
+
+  const isTampermonkeyEnabled = typeof unsafeWindow !== "undefined";
+
+  const styles = `
+        #treatOverlayCounterDiv {
+            position: fixed;
+            top: 1px; /* Adjust this value to set the distance from the top */
+            left: 1px; /* Adjust this value to set the distance from the left */
+            background-color: #EB9853;
+            color: black;
+            border-radius: 10px;
+            padding: 10px;
+            z-index: 100000;
+        }
+    `;
+
+  if (isTampermonkeyEnabled) {
+    GM_addStyle(styles);
+  } else {
+    let style = document.createElement("style");
+    style.type = "text/css";
+    style.innerHTML = styles;
+    while (document.head == null) {
+      await sleep(50);
+    }
+    document.head.appendChild(style);
+  }
+
+  function addTreatsDisplay(node) {
+    if (!node) return;
+
+    if (Array.from(node.children).filter((x) => x.id === "treatCounter").length === 1) {
+      return;
+    }
+    const clone = node.children[0].cloneNode(true);
+    clone.id = "treatCounter";
+    clone.children[0].innerText = "Treats:";
+    clone.children[1].innerText = localStorage.treatCount;
+
+    node.appendChild(clone);
+  }
+
+  function addTreatsOverlayDisplay() {
+    const overlayCounter = document.getElementById("treatOverlayCounter");
+    if (overlayCounter == null) {
+      const link = document.createElement("a");
+      link.href = "item.php";
+      link.target = "_blank";
+      const outerDiv = document.createElement("div");
+      outerDiv.id = "treatOverlayCounterDiv";
+      const valueSpan = document.createElement("span");
+      valueSpan.id = "treatOverlayCounter";
+      valueSpan.textContent = localStorage.treatCount;
+      outerDiv.appendChild(valueSpan);
+      link.appendChild(outerDiv);
+      document.body.appendChild(link);
+    }
+  }
+
+  function updateTreatsDisplay() {
+    const sidebar = document.getElementById("sidebarroot");
+    if (!sidebar) return;
+    const node = sidebar.querySelector("div[class*='points']");
+    if (!node) return;
+
+    if (Array.from(node.children).filter((x) => x.id === "treatCounter").length === 0) {
+      addTreatsDisplay(node);
+    }
+    const treatCounterNode = Array.from(node.children).find((x) => x.id === "treatCounter");
+    if (treatCounterNode) {
+      treatCounterNode.children[0].innerText = "Treats:";
+      treatCounterNode.children[1].innerText = localStorage.treatCount;
+    }
+  }
+
+  function updateTreatsOverlayDisplay() {
+    let overlayCounter = document.getElementById("treatOverlayCounter");
+    if (overlayCounter == null) {
+      addTreatsOverlayDisplay();
+      overlayCounter = document.getElementById("treatOverlayCounter");
+    }
+    if (overlayCounter) {
+      overlayCounter.textContent = localStorage.treatCount;
+    }
+  }
+
+  function updateTreatCount() {
+    const availableTreatsNodes = document.querySelectorAll("[class*='available-treats'], .available-treats");
+    if (availableTreatsNodes.length === 0) return;
+
+    const textNode = availableTreatsNodes[0].querySelector("[class*='halloween-text'], .halloween-text");
+    if (!textNode) return;
+
+    const treatText = textNode.innerText;
+    const treats = treatText.substr(0, treatText.indexOf(" "));
+
+    if (treats.length === 0 || treats === "\n" || isNaN(Number(treats))) {
+      return;
+    }
+    localStorage.treatCount = treats;
+    console.log("Available treats read, updating count to: " + treats);
+    updateTreatsDisplay();
+    updateTreatsOverlayDisplay();
+  }
+
+  function getAttackReward() {
+    const treatNode = document.querySelector(
+      "[class*='dialog-title__halloween'], [class*='dialogTitle'][class*='halloween'], .dialog-title__halloween"
+    );
+    if (!treatNode) return;
+
+    const treatText = treatNode.innerText;
+    const treatGain = treatText.substr(1, treatText.indexOf(" ") - 1);
+    if (treatGain && !isNaN(Number(treatGain))) {
+      localStorage.treatCount = Number(localStorage.treatCount) + Number(treatGain);
+      updateTreatsOverlayDisplay();
+    }
+  }
+
+  const initialSidebarPoints = document.getElementById("sidebarroot")?.querySelector("div[class*='points']");
+  addTreatsDisplay(initialSidebarPoints);
+  addTreatsOverlayDisplay();
+
+  setTimeout(() => {
+    const retrySidebarPoints = document.getElementById("sidebarroot")?.querySelector("div[class*='points']");
+    addTreatsDisplay(retrySidebarPoints);
+  }, 5000);
+
+  setInterval(() => updateTreatsDisplay(), 3000);
+  setInterval(() => updateTreatsOverlayDisplay(), 3000);
+
+  if (document.location.pathname.indexOf("item.php") > -1) {
+    const categoryWrap = document.getElementById("category-wrap") || document.querySelector("[class*='categoryWrap']");
+    if (categoryWrap) {
+      new MutationObserver(() => {
+        updateTreatCount();
+      }).observe(categoryWrap, { childList: true, subtree: true });
+    }
+  }
+
+  if (document.location.href.includes("sid=attack") || document.getElementById("attack-root")) {
+    const initAttackObserver = () => {
+      const targetNode = isMobileView
+        ? document.querySelector("[class*='playersModelWrap'] [class*='playerArea']")
+        : document.querySelectorAll("[class*='playersModelWrap'] [class*='player___']")[1] || document.querySelector("[class*='playersModelWrap']");
+
+      if (targetNode) {
+        new MutationObserver(() => {
+          getAttackReward();
+        }).observe(targetNode, { childList: true, subtree: true });
+      } else {
+        setTimeout(initAttackObserver, 500);
+      }
+    };
+
+    setTimeout(initAttackObserver, 2000);
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+})();
