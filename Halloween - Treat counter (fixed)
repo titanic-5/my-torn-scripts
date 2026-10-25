@@ -5,7 +5,7 @@
 // @match       https://www.torn.com/*
 // @run-at      document-end
 // @grant       GM_addStyle
-// @version     1.0
+// @version     1.1
 // @author      m0tch + Titanic_
 // @downloadURL https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Halloween%20-%20Treat%20counter%20(fixed)
 // @updateURL   https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Halloween%20-%20Treat%20counter%20(fixed)
@@ -19,14 +19,14 @@
 
   const viewPortWidthPx = window.innerWidth;
   const isMobileView = viewPortWidthPx <= 784;
-
   const isTampermonkeyEnabled = typeof unsafeWindow !== "undefined";
+  let rewardProcessed = false;
 
   const styles = `
         #treatOverlayCounterDiv {
             position: fixed;
-            top: 1px; /* Adjust this value to set the distance from the top */
-            left: 1px; /* Adjust this value to set the distance from the left */
+            top: 1px;
+            left: 1px;
             background-color: #EB9853;
             color: black;
             border-radius: 10px;
@@ -112,7 +112,7 @@
     const textNode = availableTreatsNodes[0].querySelector("[class*='halloween-text'], .halloween-text");
     if (!textNode) return;
 
-    const treatText = textNode.innerText;
+    const treatText = textNode.innerText; // format: "x treats"
     const treats = treatText.substr(0, treatText.indexOf(" "));
 
     if (treats.length === 0 || treats === "\n" || isNaN(Number(treats))) {
@@ -125,16 +125,28 @@
   }
 
   function getAttackReward() {
+    if (rewardProcessed) return;
+
     const treatNode = document.querySelector(
-      "[class*='dialog-title__halloween'], [class*='dialogTitle'][class*='halloween'], .dialog-title__halloween"
+      "[class*='dialog-title__halloween']:not([data-treat-collected]), " +
+        "[class*='dialogTitle'][class*='halloween']:not([data-treat-collected]), " +
+        ".dialog-title__halloween:not([data-treat-collected])"
     );
     if (!treatNode) return;
 
-    const treatText = treatNode.innerText;
-    const treatGain = treatText.substr(1, treatText.indexOf(" ") - 1);
-    if (treatGain && !isNaN(Number(treatGain))) {
-      localStorage.treatCount = Number(localStorage.treatCount) + Number(treatGain);
-      updateTreatsOverlayDisplay();
+    const treatText = treatNode.innerText.trim();
+    const match = treatText.match(/\+?(\d+)\s+treat/i);
+    if (match && match[1]) {
+      const treatGain = Number(match[1]);
+      if (!isNaN(treatGain) && treatGain > 0) {
+        treatNode.setAttribute("data-treat-collected", "true");
+        rewardProcessed = true;
+
+        localStorage.treatCount = Number(localStorage.treatCount) + treatGain;
+        console.log(`Collected ${treatGain} treats! Total: ${localStorage.treatCount}`);
+        updateTreatsOverlayDisplay();
+        updateTreatsDisplay();
+      }
     }
   }
 
