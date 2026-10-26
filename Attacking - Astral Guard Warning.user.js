@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Attacking - Astral Guard Warning
 // @namespace    titanic-5.uk
-// @version      1.1
+// @version      1.2
 // @description  If Astral Guard effect is active, shows warning (minion/maol invulnerability)
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/page.php?sid=attack*
@@ -16,7 +16,7 @@
     const warningElementId = 'astral-guard-invulnerable-warning';
 
     function checkAstralGuard() {
-        const astralGuardIcon = document.querySelector('.player___wiE8R:nth-of-type(2) img[alt="effect icon astral_guard"]');
+        const astralGuardIcon = document.querySelector('[class*="player_"]:nth-of-type(2) [alt*="astral_guard"]')
 
         let warningElement = document.getElementById(warningElementId);
 
