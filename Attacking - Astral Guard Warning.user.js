@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Attacking - Astral Guard Warning
 // @namespace    titanic-5.uk
-// @version      1.2
+// @version      1.3
 // @description  If Astral Guard effect is active, shows warning (minion/maol invulnerability)
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/page.php?sid=attack*
@@ -15,38 +15,41 @@
 
     const warningElementId = 'astral-guard-invulnerable-warning';
 
-    function checkAstralGuard() {
-        const astralGuardIcon = document.querySelector('[class*="player_"]:nth-of-type(2) [alt*="astral_guard"]')
+    function getOrCreateWarning() {
+        let warning = document.getElementById(warningElementId);
+        if (!warning) {
+            warning = document.createElement('div');
+            warning.id = warningElementId;
+            warning.textContent = "Don't Attack Yet, Invulnerable";
 
-        let warningElement = document.getElementById(warningElementId);
+            Object.assign(warning.style, {
+                position: 'fixed',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                padding: '20px 40px',
+                backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                color: 'red',
+                fontSize: '2rem',
+                zIndex: '99999',
+                border: '3px solid red',
+                textAlign: 'center',
+                pointerEvents: 'none',
+                display: 'none'
+            });
 
-        if (astralGuardIcon) {
-            if (!warningElement) {
-                warningElement = document.createElement('div');
-                warningElement.id = warningElementId;
-                warningElement.textContent = "Don't Attack Yet, Invulnerable";
-
-                Object.assign(warningElement.style, {
-                    position: 'fixed',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    padding: '20px 40px',
-                    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-                    color: 'red',
-                    fontSize: '2rem',
-                    zIndex: '99999',
-                    border: '3px solid red',
-                    textAlign: 'center',
-                    pointerEvents: 'none'
-                });
-
-                document.body.appendChild(warningElement);
-            }
+            document.body.appendChild(warning);
         }
-        else if (warningElement) warningElement.remove();
+        return warning;
+    }
+
+    function checkAstralGuard() {
+        const defender = document.getElementById('defender_Primary')?.closest('[class^="player___"]');
+        const hasAstralGuard = defender?.querySelector('img[alt*="astral_guard"]');
+        
+        const warning = getOrCreateWarning();
+        warning.style.display = hasAstralGuard ? 'block' : 'none';
     }
 
     setInterval(checkAstralGuard, 100);
-    console.log("Astral guard checker script is active");
 })();

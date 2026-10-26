@@ -10,7 +10,7 @@ To use these scripts, install a userscript manager extension in your browser:
 
 | Category | Script Name | Description | Last Updated | Preview | Quick Install |
 | :--- | :--- | :--- | :---: | :---: | :---: |
-| **Attacking** | Astral Guard Warning | Shows a warning if the Astral Guard effect is active (minion/maol invulnerability). | 11 Apr 2026 | N/A | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Astral%20Guard%20Warning.user.js) |
+| **Attacking** | Astral Guard Warning | Shows a warning if the Astral Guard effect is active (minion/maol invulnerability). | 26 Oct 2026 | [Preview](#astral-guard) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Astral%20Guard%20Warning.user.js) |
 | **Attacking** | Attack Bind | Press `ALT+A` on a player's profile to navigate directly to their attack page. | 01 Sep 2026 | N/A | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Attack%20Bind.user.js) |
 | **Attacking** | Halloween Target List | Adds toggle to profiles and displays the list under Enemies and Targets. | 27 Sep 2026 | [Preview](#halloween-target-list) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Halloween%20Target%20List.user.js) |
 | **Attacking** | Log Highlighter | Highlights special events inside attack logs. | 21 Jul 2026 | [Preview](#log-highlighter) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Log%20Highlighter.js) |
@@ -41,6 +41,13 @@ To use these scripts, install a userscript manager extension in your browser:
 ---
 
 ## Screenshots
+
+### Astral Guard
+
+![Astral Guard Warning](screenshots/astral_guard.png)
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Astral%20Guard%20Warning.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
+
+---
 
 ### Halloween Target List
 ![Halloween Target List](screenshots/halloween-targets.png)  
