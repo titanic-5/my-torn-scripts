@@ -84,7 +84,7 @@ No Preview
 
 ### Quick Slots (Fixed)
 
-No Preview  
+![Quick Slots](screenshots/quick-slots.gif) 
 [Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Casino%20-%20Quick%20Slots%20Fixed.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
