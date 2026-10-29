@@ -50,12 +50,6 @@ To use these scripts, install a userscript manager extension in your browser:
 
 ---
 
-### Halloween Target List
-![Halloween Target List](screenshots/halloween-targets.png)  
-[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Halloween%20Target%20List.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
-
----
-
 ### Log Highlighter
 ![Log Highlighter](screenshots/log-highlighter.png)  
 [Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Log%20Highlighter.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
@@ -137,6 +131,12 @@ To use these scripts, install a userscript manager extension in your browser:
 ### Chat
 ![Chat](screenshots/styling-chat.png)  
 [Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Styling%20-%20Chat.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
+
+---
+
+### Halloween Target List
+![Halloween Target List](screenshots/halloween-targets.png)  
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Halloween%20Target%20List.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
