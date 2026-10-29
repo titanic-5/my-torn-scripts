@@ -12,7 +12,6 @@ To use these scripts, install a userscript manager extension in your browser:
 | :--- | :--- | :--- | :---: | :---: | :---: |
 | **Attacking** | Astral Guard Warning | Shows a warning if the Astral Guard effect is active (minion/maol invulnerability). | 26 Oct 2026 | [Preview](#astral-guard-warning) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Astral%20Guard%20Warning.user.js) |
 | **Attacking** | Attack Bind | Press `ALT+A` on a player's profile to navigate directly to their attack page. | 01 Sep 2026 | N/A | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Attack%20Bind.user.js) |
-| **Attacking** | Halloween Target List | Adds toggle to profiles and displays the list under Enemies and Targets. | 27 Sep 2026 | [Preview](#halloween-target-list) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Halloween%20Target%20List.user.js) |
 | **Attacking** | Log Highlighter | Highlights special events inside attack logs. | 21 Jul 2026 | [Preview](#log-highlighter) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Log%20Highlighter.js) |
 | **Attacking** | Zerg Defyer | Makes usernames on the attack loader clickable directly to their attack pages. | 10 Apr 2026 | N/A | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Zerg%20Defyer.user.js) |
 | **Bazaar** | Auto-Fill Search | Auto-fills search field with item name in bazaars. | 10 Feb 2025 | [Preview](#auto-fill-search) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Bazaar%20-%20Auto-fill%20Search.user.js) |
@@ -37,6 +36,8 @@ To use these scripts, install a userscript manager extension in your browser:
 | **Warring** | Stakeout | Stakeout factions or individual users. | 06 Jul 2026 | [Preview](#stakeout) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Warring%20-%20Stakeout.user.js) |
 | **Warring** | Stop hitting midknight | Removes attack buttons for specified user IDs. | 03 Feb 2025 | N/A | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Warring%20-%20Stop%20hitting%20midknight.user.js) |
 | **Styling** | Chat | Get rid of the ugly ass box shadow. Reverted to chat 2.0 | 30 Sep 2026 | [Preview](#chat) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Styling%20-%20Chat.user.js) |
+| **Halloween** | Halloween Target List | Adds toggle to profiles and displays the list under Enemies and Targets. | 27 Sep 2026 | [Preview](#halloween-target-list) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Halloween%20Target%20List.user.js) |
+| **Halloween** | Treat Counter (Fixed) | Original by m0tch. Adds treat counter to torn | 25 Oct 2026 | [Preview](#treat-counter) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Halloween%20-%20Treat%20counter%20(fixed)) |
 
 ---
 
@@ -136,3 +137,9 @@ To use these scripts, install a userscript manager extension in your browser:
 ### Chat
 ![Chat](screenshots/styling-chat.png)  
 [Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Styling%20-%20Chat.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
+
+---
+
+### Treat Counter
+![Counter](screenshots/treat-counter.png)  
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Halloween%20-%20Treat%20counter%20(fixed)) &nbsp;|&nbsp; [Back to top](#scripts-table)
