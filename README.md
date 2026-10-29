@@ -16,7 +16,7 @@ To use these scripts, install a userscript manager extension in your browser:
 | **Attacking** | Zerg Defyer | Makes usernames on the attack loader clickable directly to their attack pages. | 10 Apr 2026 | N/A | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Zerg%20Defyer.user.js) |
 | **Bazaar** | Auto-Fill Search | Auto-fills search field with item name in bazaars. | 10 Feb 2025 | [Preview](#auto-fill-search) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Bazaar%20-%20Auto-fill%20Search.user.js) |
 | **Bazaar** | Remove All | Adds a convenient remove all button to the bazaar management page. | 10 Feb 2025 | [Preview](#remove-all) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Bazaar%20-%20Remove%20All.user.js) |
-| **Casino** | Quick Slots (Fixed) | Original by Travis Smith. Fixed to not long spin when spam clicking | 18 Oct 2025 | N/A | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Casino%20-%20Quick%20Slots%20Fixed.user.js)
+| **Casino** | Quick Slots (Fixed) | Original by Travis Smith. Fixed to not long spin when spam clicking | 18 Oct 2025 | N/A | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Casino%20-%20Quick%20Slots%20Fixed.user.js) |
 | **Company** | Max Deposit | Automatically maxes out the deposit input in a company vault. | 22 May 2025 | N/A | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Company%20-%20Max%20Deposit.user.js) |
 | **Company** | Withdraw Buttons | Adds buttons to remove at million $ intervals to make managing money easier. | 22 May 2025 | [Preview](#withdraw-buttons) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Company%20-%20Withdraw%20Buttons.user.js) |
 | **Crimes** | Pickpocket Helper | Pickpocket HUD overlay for Crimes 2.0. | 22 Sep 2026 | [Preview](#pickpocket-helper) | [![Install](https://img.shields.io/badge/Install-2ea44f?style=flat-square&logo=tampermonkey&logoColor=white)](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Crimes%20-%20Pickpocket%20Helper.user.js) |
@@ -50,9 +50,23 @@ To use these scripts, install a userscript manager extension in your browser:
 
 ---
 
+### Attack Bind
+
+No Preview  
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Attack%20Bind.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
+
+---
+
 ### Log Highlighter
 ![Log Highlighter](screenshots/log-highlighter.png)  
 [Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Log%20Highlighter.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
+
+---
+
+### Zerg Defyer
+
+No Preview  
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Zerg%20Defyer.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
@@ -65,6 +79,20 @@ To use these scripts, install a userscript manager extension in your browser:
 ### Remove All
 ![Remove All](screenshots/bazaar-remove-all.png)  
 [Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Bazaar%20-%20Remove%20All.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
+
+---
+
+### Quick Slots (Fixed)
+
+No Preview  
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Casino%20-%20Quick%20Slots%20Fixed.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
+
+---
+
+### Max Deposit
+
+No Preview  
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Company%20-%20Max%20Deposit.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
@@ -92,9 +120,37 @@ To use these scripts, install a userscript manager extension in your browser:
 
 ---
 
+### Education Timer
+
+No Preview  
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Global%20-%20Education%20Timer.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
+
+---
+
 ### Mini Calendar
 ![Mini Calendar](screenshots/mini-calendar.png)  
 [Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Global%20-%20Mini%20Calendar.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
+
+---
+
+### Profit Checker
+
+No Preview  
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Global%20-%20Profit%20Checker.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
+
+---
+
+### One Click Revive
+
+No Preview  
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Hospital%20-%20One%20Click%20Revive.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
+
+---
+
+### Remove Revives Below X%
+
+No Preview  
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Hospital%20-%20Remove%20Revives%20Below%20Percent.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
@@ -116,15 +172,36 @@ To use these scripts, install a userscript manager extension in your browser:
 
 ---
 
+### Give to Hollis
+
+No Preview  
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Trolling%20-%20Give%20to%20Hollis.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
+
+---
+
 ### Background Check
 ![Background Check](screenshots/background-check.png)  
 [Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Users%20-%20Background%20Check.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
+### Member Status
+
+No Preview  
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Warring%20-%20Member%20Status.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
+
+---
+
 ### Stakeout
 ![Stakeout](screenshots/warring-stakeout.png)  
 [Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Warring%20-%20Stakeout.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
+
+---
+
+### Stop hitting midknight
+
+No Preview  
+[Install](https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Warring%20-%20Stop%20hitting%20midknight.user.js) &nbsp;|&nbsp; [Back to top](#scripts-table)
 
 ---
 
