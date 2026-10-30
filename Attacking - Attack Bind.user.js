@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Attacking - Attack Bind
 // @namespace    titanic-5.uk
-// @version      1.0
+// @version      1.1
 // @description  Press ALT+A on player profile to go to attack page
 // @author       Titanic_ [2968477]
 // @match        https://www.torn.com/profiles.php*
+// @run-at       document-start
 // @downloadURL  https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Attack%20Bind.user.js
 // @updateURL    https://github.com/titanic-5/my-torn-scripts/raw/refs/heads/main/Attacking%20-%20Attack%20Bind.user.js
 // @grant        none
